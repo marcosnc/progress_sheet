@@ -58,21 +58,39 @@ export default function ProjectDetailScreen() {
   return (
     <ScrollView style={{ flex: 1, backgroundColor: "#0f0f12" }} contentContainerStyle={{ padding: 16 }}>
       <Text style={{ fontSize: 22, color: "#e4e4e7", marginBottom: 8 }}>{project.name}</Text>
-      <Pressable
-        onPress={() => router.push({ pathname: "/project/[id]/record", params: { id: id! } })}
-        style={{
-          backgroundColor: "#3b82f6",
-          padding: 12,
-          borderRadius: 8,
-          alignItems: "center",
-          marginBottom: 16,
-        }}
-      >
-        <Text style={{ color: "white", fontWeight: "600" }}>Registrar avance</Text>
-      </Pressable>
+      <View style={{ marginBottom: 16 }}>
+        <Pressable
+          onPress={() => router.push({ pathname: "/project/[id]/record", params: { id: id! } })}
+          style={{
+            backgroundColor: "#3b82f6",
+            padding: 12,
+            borderRadius: 8,
+            alignItems: "center",
+            marginBottom: 8,
+          }}
+        >
+          <Text style={{ color: "white", fontWeight: "600" }}>Registro de avance</Text>
+        </Pressable>
+
+        <View
+          style={{
+            padding: 12,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: "#2a2a30",
+            backgroundColor: "#18181c",
+            marginBottom: 8,
+          }}
+        >
+          <Text style={{ color: "#e4e4e7", fontWeight: "600", textAlign: "center" }}>Consulta de estado</Text>
+        </View>
+
+        <Text style={{ color: "#71717a" }}>Planificación: disponible en la web (por ahora).</Text>
+      </View>
+
       <Text style={{ color: "#71717a", marginBottom: 16 }}>Avances registrados: {progressItems.length}</Text>
       {progressItems.length === 0 ? (
-        <Text style={{ color: "#71717a" }}>Aún no hay avances. Cargá desde la web o desde esta app cuando implementemos el formulario de carga.</Text>
+        <Text style={{ color: "#71717a" }}>Aún no hay avances. Registrá desde “Registro de avance”.</Text>
       ) : (
         progressItems.slice(0, 20).map((item, i) => (
           <View

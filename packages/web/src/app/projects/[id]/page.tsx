@@ -60,6 +60,18 @@ export default function ProjectDetailPage() {
   const [progressValue, setProgressValue] = useState("");
   const [showRecordProgress, setShowRecordProgress] = useState(false);
 
+  const [activeCategory, setActiveCategory] = useState<"planificacion" | "registro" | "consulta">("planificacion");
+  const [activePlanningTab, setActivePlanningTab] = useState<
+    "espacial" | "tareas" | "dimensiones" | "asignaciones" | "validacion"
+  >("espacial");
+
+  // Para la pantalla "Asignaciones": editar el set de tareas asociadas a una ubicación
+  const [assignmentLocationId, setAssignmentLocationId] = useState("");
+  const [assignmentTaskIds, setAssignmentTaskIds] = useState<string[]>([]);
+
+  // Filtro UX para la pantalla "Consulta de estado" por dimensión
+  const [dimensionFilterId, setDimensionFilterId] = useState<string>("");
+
   const { data: project, isLoading, error } = useQuery({
     queryKey: ["project", id],
     queryFn: () => projectsApi.get(id),
@@ -255,6 +267,16 @@ export default function ProjectDetailPage() {
     },
   });
 
+  // Actualiza solo el vínculo "tareas ↔ ubicación" (taskDefinitionIds) sin tocar el nombre.
+  const updateLocationTaskDefinitions = useMutation({
+    mutationFn: (body: { locationId: string; taskDefinitionIds: string[] }) =>
+      locationsApi.update(id, body.locationId, { taskDefinitionIds: body.taskDefinitionIds }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["locations", id] });
+      await queryClient.invalidateQueries({ queryKey: ["project", id] });
+    },
+  });
+
   const deleteLocation = useMutation({
     mutationFn: (locationId: string) => locationsApi.delete(id, locationId),
     onSuccess: () => {
@@ -287,10 +309,46 @@ export default function ProjectDetailPage() {
   const tasksForProgressLocation = (currentPlan?.taskDefinitions ?? []).filter((t) =>
     progressSelectedLocation?.taskDefinitionIds?.includes(t.id)
   );
+  const selectedTaskForProgress = (currentPlan?.taskDefinitions ?? []).find((t) => t.id === progressTaskId);
+  const selectedTaskStateOptions = (() => {
+    const so: unknown = selectedTaskForProgress?.stateOptions ?? null;
+    if (Array.isArray(so)) return so.map(String);
+    if (typeof so === "string") {
+      try {
+        const parsed: unknown = JSON.parse(so);
+        if (Array.isArray(parsed)) return parsed.map(String);
+      } catch {
+        // ignore
+      }
+    }
+    return [];
+  })();
+  const planTaskDefinitions = currentPlan?.taskDefinitions ?? [];
+  const usedTaskIdsByLocations = new Set<string>(locations.flatMap((l) => l.taskDefinitionIds ?? []));
+  const tasksWithoutLocations = planTaskDefinitions.filter((t) => !usedTaskIdsByLocations.has(t.id));
+  const locationsWithoutTasks = locations.filter((l) => (l.taskDefinitionIds?.length ?? 0) === 0);
   const levels = levelsData?.levels ?? [];
   const dimensions = dimensionsData?.dimensions ?? [];
+  const taskDimensionIdsByTaskId: Record<string, string[]> = {};
+  const taskDimensionNamesByTaskId: Record<string, string[]> = {};
+  planTaskDefinitions.forEach((t) => {
+    try {
+      const dv = t.dimensionValues ? (JSON.parse(t.dimensionValues) as Record<string, string>) : {};
+      const selectedDimensionIds = Object.keys(dv).filter((dimId) => !!dv[dimId]);
+      taskDimensionIdsByTaskId[t.id] = selectedDimensionIds;
+      taskDimensionNamesByTaskId[t.id] = dimensions.filter((d) => selectedDimensionIds.includes(d.id)).map((d) => d.name);
+    } catch {
+      taskDimensionIdsByTaskId[t.id] = [];
+      taskDimensionNamesByTaskId[t.id] = [];
+    }
+  });
   const items = progress?.items ?? [];
   const projections = velocity?.projections ?? [];
+
+  const filteredItems =
+    dimensionFilterId && dimensionFilterId.trim()
+      ? items.filter((it) => (taskDimensionIdsByTaskId[it.taskDefinitionId] ?? []).includes(dimensionFilterId))
+      : items;
 
   function startEditingTask(
     t: { id: string; name: string; progressValueType: string; quantityUnit?: string | null; dimensionValues?: string | null }
@@ -328,8 +386,66 @@ export default function ProjectDetailPage() {
         <h1 style={{ margin: "0.5rem 0" }}>{project.name}</h1>
       </div>
 
-      {/* Plan actual */}
-      <section style={{ marginBottom: "2rem" }}>
+      {/* Navegación principal por categoría */}
+      <nav style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem", flexWrap: "wrap" }}>
+        {(
+          [
+            ["planificacion", "Planificación"],
+            ["registro", "Registro de avance"],
+            ["consulta", "Consulta de estado"],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setActiveCategory(key)}
+            style={{
+              padding: "0.5rem 0.9rem",
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              background: activeCategory === key ? "var(--accent)" : "var(--surface)",
+              color: activeCategory === key ? "white" : "var(--text)",
+              cursor: "pointer",
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      {/* Tabs internos para Planificación */}
+      {activeCategory === "planificacion" && (
+        <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
+          {(
+            [
+              ["espacial", "Espacial"],
+              ["tareas", "Tareas"],
+              ["dimensiones", "Dimensiones"],
+              ["asignaciones", "Asignaciones"],
+              ["validacion", "Validación"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setActivePlanningTab(key)}
+              style={{
+                padding: "0.45rem 0.85rem",
+                borderRadius: 8,
+                border: "1px solid var(--border)",
+                background: activePlanningTab === key ? "var(--accent)" : "var(--surface)",
+                color: activePlanningTab === key ? "white" : "var(--text)",
+                cursor: "pointer",
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {activeCategory === "planificacion" && activePlanningTab === "tareas" && (
+        <section style={{ marginBottom: "2rem" }}>
         <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Plan actual</h2>
         {currentPlan ? (
           <>
@@ -592,10 +708,13 @@ export default function ProjectDetailPage() {
             </button>
           </div>
         )}
-      </section>
+        </section>
+      )}
 
-      {/* Dimensiones (para clasificar tareas: proveedor, ambiente, etc.) */}
-      <section style={{ marginBottom: "2rem" }}>
+      {activeCategory === "planificacion" && activePlanningTab === "dimensiones" && (
+        <>
+          {/* Dimensiones (para clasificar tareas: proveedor, ambiente, etc.) */}
+          <section style={{ marginBottom: "2rem" }}>
         <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Dimensiones</h2>
         <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginBottom: "0.75rem" }}>
           Las dimensiones son etiquetas para agrupar y filtrar tareas. Definí las que necesites (ej. Proveedor, Tipo de ambiente) y luego, al crear cada tarea en &quot;Agregar tarea&quot;, seleccioná qué dimensiones aplican a esa tarea.
@@ -732,10 +851,14 @@ export default function ProjectDetailPage() {
             </div>
           </div>
         )}
-      </section>
+          </section>
+        </>
+      )}
 
-      {/* Ubicaciones */}
-      <section style={{ marginBottom: "2rem" }}>
+      {activeCategory === "planificacion" && activePlanningTab === "espacial" && (
+        <>
+          {/* Ubicaciones */}
+          <section style={{ marginBottom: "2rem" }}>
         <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Ubicaciones</h2>
         {(levels.length === 0 || showAddLevel) ? (
           <div
@@ -1374,9 +1497,11 @@ export default function ProjectDetailPage() {
             )}
           </div>
         )}
-      </section>
+          </section>
+        </>
+      )}
 
-      {projections.length > 0 && (
+      {activeCategory === "consulta" && projections.length > 0 && (
         <section style={{ marginBottom: "2rem" }}>
           <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Proyección por velocidad</h2>
           <p style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
@@ -1401,7 +1526,272 @@ export default function ProjectDetailPage() {
         </section>
       )}
 
-      <section>
+      {/* Asignaciones (tareas ↔ ubicaciones) */}
+      {activeCategory === "planificacion" && activePlanningTab === "asignaciones" && (
+        <section style={{ marginBottom: "2rem" }}>
+          <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Asignaciones</h2>
+          <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginBottom: "0.75rem" }}>
+            Asociá tareas a ubicaciones. Esto define qué se puede registrar como avance para cada combinación.
+          </p>
+          <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: "-0.35rem", marginBottom: "0.75rem" }}>
+            Nota: el metrado total planificado por tarea/ubicación todavía no está modelado en el backend; por ahora se registra el valor de avance.
+          </p>
+
+          {!currentPlan ? (
+            <p style={{ color: "var(--muted)" }}>Primero creá un plan en la pestaña Tareas.</p>
+          ) : (
+            <>
+              <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+                <div style={{ flex: "0 0 300px", minWidth: 260 }}>
+                  <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginBottom: "0.5rem" }}>Ubicación</p>
+                  <select
+                    value={assignmentLocationId}
+                    onChange={(e) => {
+                      const locId = e.target.value;
+                      setAssignmentLocationId(locId);
+                      const loc = locations.find((l) => l.id === locId);
+                      setAssignmentTaskIds(loc?.taskDefinitionIds ?? []);
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "0.5rem",
+                      marginBottom: "0.75rem",
+                      background: "var(--bg)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 6,
+                      color: "var(--text)",
+                    }}
+                  >
+                    <option value="">Seleccionar ubicación</option>
+                    {locations.map((loc) => (
+                      <option key={loc.id} value={loc.id}>
+                        {loc.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ flex: "1 1 320px", minWidth: 260 }}>
+                  <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginBottom: "0.5rem" }}>Tareas</p>
+                  {!assignmentLocationId ? (
+                    <p style={{ color: "var(--muted)", marginBottom: "0.75rem" }}>Elegí una ubicación para ver sus tareas.</p>
+                  ) : planTaskDefinitions.length === 0 ? (
+                    <p style={{ color: "var(--muted)", marginBottom: "0.75rem" }}>No hay tareas en el plan.</p>
+                  ) : (
+                    <>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem 1rem" }}>
+                        {planTaskDefinitions.map((t) => (
+                          <label key={t.id} style={{ display: "flex", alignItems: "center", gap: "0.35rem", cursor: "pointer" }}>
+                            <input
+                              type="checkbox"
+                              checked={assignmentTaskIds.includes(t.id)}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setAssignmentTaskIds((prev) =>
+                                  checked ? [...prev, t.id] : prev.filter((id) => id !== t.id)
+                                );
+                              }}
+                            />
+                            <span style={{ fontSize: "0.9rem", color: "var(--text)" }}>{t.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                      {updateLocationTaskDefinitions.error && (
+                        <p style={{ color: "#ef4444", marginTop: "0.75rem" }}>
+                          {updateLocationTaskDefinitions.error instanceof Error
+                            ? updateLocationTaskDefinitions.error.message
+                            : "Error al guardar asignaciones"}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateLocationTaskDefinitions.mutate({
+                      locationId: assignmentLocationId,
+                      taskDefinitionIds: assignmentTaskIds,
+                    })
+                  }
+                  disabled={
+                    !assignmentLocationId ||
+                    updateLocationTaskDefinitions.isPending ||
+                    planTaskDefinitions.length === 0
+                  }
+                  style={{
+                    padding: "0.5rem 1rem",
+                    background: "var(--accent)",
+                    color: "white",
+                    border: "none",
+                    borderRadius: 6,
+                  }}
+                >
+                  {updateLocationTaskDefinitions.isPending ? "Guardando…" : "Guardar asignaciones"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAssignmentLocationId("");
+                    setAssignmentTaskIds([]);
+                  }}
+                  disabled={updateLocationTaskDefinitions.isPending}
+                  style={{
+                    padding: "0.5rem 1rem",
+                    border: "1px solid var(--border)",
+                    borderRadius: 6,
+                    color: "var(--text)",
+                    background: "transparent",
+                  }}
+                >
+                  Limpiar
+                </button>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      {/* Validación del plan */}
+      {activeCategory === "planificacion" && activePlanningTab === "validacion" && (
+        <section style={{ marginBottom: "2rem" }}>
+          <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Validación</h2>
+          {!currentPlan ? (
+            <p style={{ color: "var(--muted)" }}>Creá un plan para que aparezcan validaciones.</p>
+          ) : (
+            <>
+              <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginBottom: "0.75rem" }}>
+                Checklist rápido para detectar inconsistencias antes de registrar avances.
+              </p>
+              <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: "-0.35rem", marginBottom: "0.75rem" }}>
+                Nota: todavía no se calcula metrado total por tarea/ubicación; la validación se centra en la asociación (qué se puede cargar).
+              </p>
+
+              <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                {tasksWithoutLocations.length > 0 && (
+                  <li
+                    style={{
+                      padding: "0.75rem",
+                      background: "rgba(239,68,68,0.08)",
+                      border: "1px solid rgba(239,68,68,0.35)",
+                      borderRadius: 8,
+                      marginBottom: "0.5rem",
+                    }}
+                  >
+                    <strong style={{ color: "#ef4444" }}>Tareas sin ubicaciones:</strong>{" "}
+                    {tasksWithoutLocations.map((t) => t.name).join(", ")}
+                  </li>
+                )}
+                {locationsWithoutTasks.length > 0 && (
+                  <li
+                    style={{
+                      padding: "0.75rem",
+                      background: "rgba(239,68,68,0.08)",
+                      border: "1px solid rgba(239,68,68,0.35)",
+                      borderRadius: 8,
+                      marginBottom: "0.5rem",
+                    }}
+                  >
+                    <strong style={{ color: "#ef4444" }}>Ubicaciones sin tareas:</strong>{" "}
+                    {locationsWithoutTasks
+                      .slice(0, 6)
+                      .map((l) => l.name)
+                      .join(", ")}
+                    {locationsWithoutTasks.length > 6 ? "…" : ""}
+                  </li>
+                )}
+                {tasksWithoutLocations.length === 0 && locationsWithoutTasks.length === 0 && (
+                  <li
+                    style={{
+                      padding: "0.75rem",
+                      background: "rgba(34,197,94,0.08)",
+                      border: "1px solid rgba(34,197,94,0.35)",
+                      borderRadius: 8,
+                    }}
+                  >
+                    <strong style={{ color: "#22c55e" }}>OK:</strong> el plan está listo para registrar avances.
+                  </li>
+                )}
+              </ul>
+            </>
+          )}
+        </section>
+      )}
+
+      {/* Consulta de estado (detalle consolidado) */}
+      {activeCategory === "consulta" && (
+        <section style={{ marginBottom: "2rem" }}>
+          <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Estado actual</h2>
+          <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginBottom: "0.5rem" }}>
+            La carga se registra por tarea y ubicación en el plan. Acá se muestra el estado consolidado.
+          </p>
+          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "flex-end", marginBottom: "1rem" }}>
+            <div style={{ flex: "0 0 260px", minWidth: 220 }}>
+              <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginBottom: "0.5rem" }}>Filtrar por dimensión</p>
+              <select
+                value={dimensionFilterId}
+                onChange={(e) => setDimensionFilterId(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "0.5rem",
+                  background: "var(--bg)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  color: "var(--text)",
+                }}
+              >
+                <option value="">Todas</option>
+                {dimensions.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {dimensionFilterId ? (
+              <p style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
+                Mostrando {filteredItems.length} avances relacionados.
+              </p>
+            ) : null}
+          </div>
+
+          {filteredItems.length ? (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                    <th style={{ textAlign: "left", padding: "0.5rem" }}>Tarea</th>
+                    <th style={{ textAlign: "left", padding: "0.5rem" }}>Ubicación</th>
+                    <th style={{ textAlign: "left", padding: "0.5rem" }}>Dimensiones</th>
+                    <th style={{ textAlign: "right", padding: "0.5rem" }}>Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredItems.map((item, i) => (
+                    <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
+                      <td style={{ padding: "0.5rem" }}>{item.taskDefinitionId.slice(0, 8)}…</td>
+                      <td style={{ padding: "0.5rem" }}>{item.locationId.slice(0, 8)}…</td>
+                      <td style={{ padding: "0.5rem" }}>
+                        {(taskDimensionNamesByTaskId[item.taskDefinitionId] ?? []).join(", ") || "—"}
+                      </td>
+                      <td style={{ padding: "0.5rem", textAlign: "right" }}>{String(item.value)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p style={{ color: "var(--muted)" }}>Aún no hay avances cargados.</p>
+          )}
+        </section>
+      )}
+
+      {activeCategory === "registro" && (
+        <section>
         <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Avance registrado</h2>
         <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginBottom: "0.5rem" }}>
           La asociación tarea–ubicación se define en el plan (Ubicaciones). Acá solo se registra valor (%, cantidad o estado) para una tarea ya asociada a la ubicación elegida.
@@ -1437,6 +1827,7 @@ export default function ProjectDetailPage() {
               onChange={(e) => {
                 setProgressLocationId(e.target.value);
                 setProgressTaskId("");
+                setProgressValue("");
               }}
               style={{
                 width: "100%",
@@ -1461,7 +1852,10 @@ export default function ProjectDetailPage() {
             ) : (
               <select
                 value={progressTaskId}
-                onChange={(e) => setProgressTaskId(e.target.value)}
+                onChange={(e) => {
+                  setProgressTaskId(e.target.value);
+                  setProgressValue("");
+                }}
                 style={{
                   width: "100%",
                   padding: "0.5rem",
@@ -1474,25 +1868,63 @@ export default function ProjectDetailPage() {
               >
                 <option value="">Seleccionar tarea</option>
                 {tasksForProgressLocation.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.progressValueType})
+                  </option>
                 ))}
               </select>
             )}
-            <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginBottom: "0.5rem" }}>Valor (% o cantidad)</p>
-            <input
-              placeholder="Ej: 100 o 25.5"
-              value={progressValue}
-              onChange={(e) => setProgressValue(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "0.5rem",
-                marginBottom: "0.75rem",
-                background: "var(--bg)",
-                border: "1px solid var(--border)",
-                borderRadius: 6,
-                color: "var(--text)",
-              }}
-            />
+            {selectedTaskForProgress?.progressValueType === "state" ? (
+              <>
+                <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginBottom: "0.5rem" }}>Estado</p>
+                <select
+                  value={progressValue}
+                  onChange={(e) => setProgressValue(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "0.5rem",
+                    marginBottom: "0.75rem",
+                    background: "var(--bg)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 6,
+                    color: "var(--text)",
+                  }}
+                >
+                  <option value="">Seleccionar estado</option>
+                  {selectedTaskStateOptions.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : (
+              <>
+                <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginBottom: "0.5rem" }}>
+                  {selectedTaskForProgress?.progressValueType === "quantity"
+                    ? `Cantidad (${selectedTaskForProgress?.quantityUnit ?? "unidad"})`
+                    : "Porcentaje (%)"}
+                </p>
+                <input
+                  type="number"
+                  step="any"
+                  placeholder={
+                    selectedTaskForProgress?.progressValueType === "quantity" ? "Ej: 25.5" : "Ej: 100"
+                  }
+                  value={progressValue}
+                  onChange={(e) => setProgressValue(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "0.5rem",
+                    marginBottom: "0.75rem",
+                    background: "var(--bg)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 6,
+                    color: "var(--text)",
+                  }}
+                />
+              </>
+            )}
             {recordProgress.error && (
               <p style={{ color: "#ef4444", marginBottom: "0.5rem" }}>
                 {recordProgress.error instanceof Error ? recordProgress.error.message : "Error al registrar"}
@@ -1529,31 +1961,11 @@ export default function ProjectDetailPage() {
             </div>
           </div>
         )}
-        {items.length ? (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                  <th style={{ textAlign: "left", padding: "0.5rem" }}>Tarea</th>
-                  <th style={{ textAlign: "left", padding: "0.5rem" }}>Ubicación</th>
-                  <th style={{ textAlign: "right", padding: "0.5rem" }}>Valor</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item, i) => (
-                  <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                    <td style={{ padding: "0.5rem" }}>{item.taskDefinitionId.slice(0, 8)}…</td>
-                    <td style={{ padding: "0.5rem" }}>{item.locationId.slice(0, 8)}…</td>
-                    <td style={{ padding: "0.5rem", textAlign: "right" }}>{String(item.value)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p style={{ color: "var(--muted)" }}>Aún no hay avances cargados.</p>
-        )}
-      </section>
+        <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: "1rem" }}>
+          Avances cargados: {items.length}. Para ver el detalle, usá la pestaña `Consulta de estado`.
+        </p>
+        </section>
+      )}
     </main>
   );
 }
