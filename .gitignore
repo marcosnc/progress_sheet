@@ -1,0 +1,12 @@
+node_modules
+dist
+.next
+.expo
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+coverage
+.turbo

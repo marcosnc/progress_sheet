@@ -1,0 +1,19 @@
+
+* Las tareas deberían poder tener estas unidades:
+  - M2
+  - Metros lineales
+  - Porcentaje
+  - Cantidad (representa un valor fijo, por ejemplo 5)
+  - Si/No (cuando una tarea puede estar completada o no completada) 
+  - Por avence de hijas
+
+* Agregar dependencias de tareas (A necesita a B para poder empezar)
+
+* Agregar Jerarquía de tareas (A es padre de B, C y D, y el avance de A depende de la suma de avances de B, C y D)
+
+* Asignación de cantidades totales en la relación Tarea -> Ubicación 
+
+* Permitir Dimensiones jerárquicas: Por ejemplo una dimensión por proveedor, y dentro de esa por tipo de artículo
+
+
+

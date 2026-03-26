@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String         @id @default(uuid())
+  email        String         @unique
+  passwordHash String
+  createdAt    DateTime       @default(now())
+  tenantMembers TenantMember[]
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  projects  Project[]
+  members   TenantMember[]
+  locationLevels LocationLevel[]
+  taskTemplates TaskTemplate[]
+  dimensions Dimension[]
+}
+
+model Dimension {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  key       String
+  order     Int      @default(0)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, key])
+  @@index([tenantId])
+}
+
+model TenantMember {
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String
+  role      String   // planner | tracker | viewer
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([userId])
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  locations   Location[]
+  planVersions PlanVersion[]
+  projectMembers ProjectMember[]
+  @@index([tenantId])
+}
+
+model ProjectMember {
+  id        String   @id @default(uuid())
+  projectId String
+  userId    String
+  role      String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  @@unique([projectId, userId])
+  @@index([projectId])
+}
+
+model LocationLevel {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  order     Int      @default(0)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId])
+}
+
+model Location {
+  id        String   @id @default(uuid())
+  projectId String
+  parentId  String?
+  levelId   String
+  name      String
+  path      String   // e.g. "b1/f3/u3a"
+  createdAt DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  locationTasks LocationTask[]
+  @@index([projectId])
+  @@index([projectId, path])
+}
+
+model LocationTask {
+  id                String   @id @default(uuid())
+  locationId        String
+  taskDefinitionId String
+  location          Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  @@unique([locationId, taskDefinitionId])
+  @@index([locationId])
+  @@index([taskDefinitionId])
+}
+
+model PlanVersion {
+  id          String   @id @default(uuid())
+  projectId   String
+  version     Int
+  createdAt   DateTime @default(now())
+  createdBy   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskDefinitions TaskDefinition[]
+  taskDependencies TaskDependency[]
+  @@unique([projectId, version])
+  @@index([projectId])
+}
+
+model TaskDefinition {
+  id                 String   @id @default(uuid())
+  planVersionId      String
+  templateId         String?
+  name               String
+  progressValueType  String   // percent | quantity | state
+  quantityUnit       String?
+  stateOptions       String?  // JSON array
+  dimensionValues    String?  // JSON object
+  createdAt          DateTime @default(now())
+  planVersion        PlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Cascade)
+  taskTemplate       TaskTemplate? @relation(fields: [templateId], references: [id])
+  dependenciesFrom  TaskDependency[] @relation("DependsOn")
+  dependenciesTo    TaskDependency[] @relation("RequiredBy")
+  @@index([planVersionId])
+  @@index([templateId])
+}
+
+model TaskDependency {
+  id                String   @id @default(uuid())
+  planVersionId     String
+  taskId            String
+  dependsOnTaskId   String
+  planVersion       PlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Cascade)
+  task              TaskDefinition @relation("RequiredBy", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOn         TaskDefinition @relation("DependsOn", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+  @@unique([planVersionId, taskId, dependsOnTaskId])
+  @@index([planVersionId])
+}
+
+model TaskTemplate {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  createdAt DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  taskDefinitions TaskDefinition[]
+  @@index([tenantId])
+}
+
+model Event {
+  id         String   @id @default(uuid())
+  tenantId   String
+  projectId  String
+  type       String
+  payload    String   // JSON
+  occurredAt DateTime
+  userId     String
+  sequence   Int
+  @@index([tenantId, projectId])
+  @@index([projectId, type, occurredAt])
+  @@index([projectId, sequence])
+}
+
+model ProgressSnapshot {
+  id                String   @id @default(uuid())
+  projectId         String
+  taskDefinitionId  String
+  locationId        String
+  value             String   // JSON: number or string for state
+  updatedAt         DateTime
+  @@unique([projectId, taskDefinitionId, locationId])
+  @@index([projectId])
+  @@index([projectId, taskDefinitionId])
+  @@index([projectId, locationId])
+}
