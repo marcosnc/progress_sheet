@@ -15,6 +15,11 @@ import {
 } from "@/lib/api";
 import { ListRow } from "@/components/ListRow";
 
+function formatRecordedAt(iso: string) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" });
+}
+
 export default function ProjectDetailPage() {
   const params = useParams();
   const id = params.id as string;
@@ -115,6 +120,11 @@ export default function ProjectDetailPage() {
   const { data: progress } = useQuery({
     queryKey: ["progress", id],
     queryFn: () => progressApi.getState(id),
+    enabled: !!project,
+  });
+  const { data: progressEvents } = useQuery({
+    queryKey: ["progress-events", id],
+    queryFn: () => progressApi.getEvents(id, { limit: 5000 }),
     enabled: !!project,
   });
   const { data: velocity } = useQuery({
@@ -265,7 +275,9 @@ export default function ProjectDetailPage() {
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["progress", id] });
+      await queryClient.invalidateQueries({ queryKey: ["progress-events", id] });
       await queryClient.refetchQueries({ queryKey: ["progress", id] });
+      await queryClient.refetchQueries({ queryKey: ["progress-events", id] });
       setProgressValue("");
       setShowRecordProgress(false);
     },
@@ -392,6 +404,11 @@ export default function ProjectDetailPage() {
     progressSelectedLocation?.taskDefinitionIds?.includes(t.id)
   );
   const selectedTaskForProgress = (currentPlan?.taskDefinitions ?? []).find((t) => t.id === progressTaskId);
+  const selectedAssignmentTotalQuantity =
+    selectedTaskForProgress?.id && progressSelectedLocation?.taskAssignments
+      ? progressSelectedLocation.taskAssignments.find((a) => a.taskDefinitionId === selectedTaskForProgress.id)?.totalQuantity ??
+        null
+      : null;
   const selectedTaskStateOptions = (() => {
     const so: unknown = selectedTaskForProgress?.stateOptions ?? null;
     if (Array.isArray(so)) return so.map(String);
@@ -425,12 +442,20 @@ export default function ProjectDetailPage() {
     }
   });
   const items = progress?.items ?? [];
+  const eventItems = progressEvents?.events ?? [];
   const projections = velocity?.projections ?? [];
 
   const filteredItems =
     dimensionFilterId && dimensionFilterId.trim()
       ? items.filter((it) => (taskDimensionIdsByTaskId[it.taskDefinitionId] ?? []).includes(dimensionFilterId))
       : items;
+  const filteredEventItems =
+    dimensionFilterId && dimensionFilterId.trim()
+      ? eventItems.filter((it) => (taskDimensionIdsByTaskId[it.taskDefinitionId] ?? []).includes(dimensionFilterId))
+      : eventItems;
+
+  const locationNameById = Object.fromEntries(locations.map((l) => [l.id, l.name]));
+  const taskNameById = Object.fromEntries(planTaskDefinitions.map((t) => [t.id, t.name]));
 
   function startEditingTask(
     t: {
@@ -2221,7 +2246,7 @@ export default function ProjectDetailPage() {
                   marginBottom: 4,
                 }}
               >
-                Tarea {p.taskDefinitionId.slice(0, 8)}… / Ubicación {p.locationId.slice(0, 8)}… — Actual: {p.currentValue} · Días estimados: {p.daysToComplete != null ? Math.round(p.daysToComplete) : "—"}
+                {locationNameById[p.locationId] ?? p.locationId} / {taskNameById[p.taskDefinitionId] ?? p.taskDefinitionId} — Actual: {p.currentValue} · Días estimados: {p.daysToComplete != null ? Math.round(p.daysToComplete) : "—"}
               </li>
             ))}
           </ul>
@@ -2514,27 +2539,35 @@ export default function ProjectDetailPage() {
             </div>
             {dimensionFilterId ? (
               <p style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
-                Mostrando {filteredItems.length} avances relacionados.
+                Mostrando {filteredEventItems.length} avances relacionados.
               </p>
             ) : null}
           </div>
 
-          {filteredItems.length ? (
+          {filteredEventItems.length ? (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                    <th style={{ textAlign: "left", padding: "0.5rem" }}>Tarea</th>
+                    <th style={{ textAlign: "left", padding: "0.5rem", whiteSpace: "nowrap" }}>Registrado</th>
                     <th style={{ textAlign: "left", padding: "0.5rem" }}>Ubicación</th>
+                    <th style={{ textAlign: "left", padding: "0.5rem" }}>Tarea</th>
                     <th style={{ textAlign: "left", padding: "0.5rem" }}>Dimensiones</th>
                     <th style={{ textAlign: "right", padding: "0.5rem" }}>Valor</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredItems.map((item, i) => (
-                    <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                      <td style={{ padding: "0.5rem" }}>{item.taskDefinitionId.slice(0, 8)}…</td>
-                      <td style={{ padding: "0.5rem" }}>{item.locationId.slice(0, 8)}…</td>
+                  {filteredEventItems.map((item) => (
+                    <tr key={item.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                      <td style={{ padding: "0.5rem", color: "var(--muted)", whiteSpace: "nowrap", fontSize: "0.9rem" }}>
+                        {formatRecordedAt(item.occurredAt)}
+                      </td>
+                      <td style={{ padding: "0.5rem" }}>
+                        {locationNameById[item.locationId] ?? item.locationId}
+                      </td>
+                      <td style={{ padding: "0.5rem" }}>
+                        {taskNameById[item.taskDefinitionId] ?? item.taskDefinitionId}
+                      </td>
                       <td style={{ padding: "0.5rem" }}>
                         {(taskDimensionNamesByTaskId[item.taskDefinitionId] ?? []).join(", ") || "—"}
                       </td>
@@ -2634,6 +2667,34 @@ export default function ProjectDetailPage() {
                 ))}
               </select>
             )}
+            {progressTaskId && selectedTaskForProgress ? (
+              <div style={{ marginTop: "-0.25rem", marginBottom: "0.75rem" }}>
+                <p style={{ color: "var(--muted)", fontSize: "0.85rem", margin: 0 }}>
+                  Tipo de avance:{" "}
+                  <strong style={{ color: "var(--text)" }}>
+                    {selectedTaskForProgress.progressValueType === "quantity"
+                      ? "Cantidad"
+                      : selectedTaskForProgress.progressValueType === "state"
+                        ? "Estado"
+                        : "Porcentaje"}
+                  </strong>
+                  {selectedTaskForProgress.progressValueType === "quantity" ? (
+                    <>
+                      {" "}
+                      · Unidad:{" "}
+                      <strong style={{ color: "var(--text)" }}>
+                        {selectedTaskForProgress.quantityUnit?.trim() || "unid."}
+                      </strong>
+                      {" "}
+                      · Total planificado:{" "}
+                      <strong style={{ color: "var(--text)" }}>
+                        {selectedAssignmentTotalQuantity == null ? "—" : String(selectedAssignmentTotalQuantity)}
+                      </strong>
+                    </>
+                  ) : null}
+                </p>
+              </div>
+            ) : null}
             {selectedTaskForProgress?.progressValueType === "state" ? (
               <>
                 <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginBottom: "0.5rem" }}>Estado</p>
@@ -2649,6 +2710,7 @@ export default function ProjectDetailPage() {
                     borderRadius: 6,
                     color: "var(--text)",
                   }}
+                  disabled={!progressTaskId}
                 >
                   <option value="">Seleccionar estado</option>
                   {selectedTaskStateOptions.map((opt) => (
@@ -2669,10 +2731,15 @@ export default function ProjectDetailPage() {
                   type="number"
                   step="any"
                   placeholder={
-                    selectedTaskForProgress?.progressValueType === "quantity" ? "Ej: 25.5" : "Ej: 100"
+                    !progressTaskId
+                      ? "Seleccioná una tarea"
+                      : selectedTaskForProgress?.progressValueType === "quantity"
+                        ? "Ej: 25.5"
+                        : "Ej: 100"
                   }
                   value={progressValue}
                   onChange={(e) => setProgressValue(e.target.value)}
+                  disabled={!progressTaskId}
                   style={{
                     width: "100%",
                     padding: "0.5rem",
@@ -2722,7 +2789,7 @@ export default function ProjectDetailPage() {
           </div>
         )}
         <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: "1rem" }}>
-          Avances cargados: {items.length}. Para ver el detalle, usá la pestaña `Consulta de estado`.
+          Registros de avance: {eventItems.length}. Para ver el detalle, usá la pestaña `Consulta de estado`.
         </p>
         </section>
       )}

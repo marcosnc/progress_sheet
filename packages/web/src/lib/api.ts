@@ -206,6 +206,23 @@ export const progressApi = {
     api<{ items: { taskDefinitionId: string; locationId: string; value: number | string }[] }>(
       `/projects/${projectId}/progress/state`
     ),
+  getEvents: (projectId: string, params?: { limit?: number }) =>
+    api<{
+      events: {
+        id: string;
+        occurredAt: string;
+        sequence: number;
+        taskDefinitionId: string;
+        locationId: string;
+        value: number | string;
+        delta: number | null;
+      }[];
+    }>(`/projects/${projectId}/progress/events`, {
+      params:
+        params?.limit != null
+          ? { limit: String(params.limit) }
+          : undefined,
+    }),
   record: (projectId: string, body: { taskDefinitionId: string; locationId: string; value: number | string; delta?: number }) =>
     api<{ id: string }>(`/projects/${projectId}/progress`, {
       method: "POST",

@@ -4,6 +4,7 @@ import { appendEvent } from "../event-store.js";
 import { requireTenant } from "../auth.js";
 import { prisma } from "../db.js";
 import { computeProgressState, getProgressAggregated } from "../aggregation/engine.js";
+import { getEvents } from "../event-store.js";
 
 export async function progressRoutes(app: FastifyInstance) {
   app.addHook("preHandler", async (request, reply) => {
@@ -130,5 +131,38 @@ export async function progressRoutes(app: FastifyInstance) {
     const state = await computeProgressState(projectId, { persist: false });
     const items = Array.from(state.values());
     return { items };
+  });
+
+  // Lista de eventos de progreso (para auditoría / vista de registros acumulativos).
+  app.get("/projects/:projectId/progress/events", async (request, reply) => {
+    const auth = (request as { auth?: { tenantId: string } }).auth!;
+    const { projectId } = request.params as { projectId: string };
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, tenantId: auth.tenantId },
+    });
+    if (!project) return reply.status(404).send({ error: "Project not found" });
+
+    const query = request.query as { limit?: string };
+    const limit = query.limit ? Math.min(50000, Math.max(1, Number(query.limit) || 2000)) : 2000;
+
+    const events = await getEvents(projectId, { types: ["progress.recorded"], limit });
+    const result = events.map((ev) => {
+      const payload = JSON.parse(ev.payload) as {
+        taskDefinitionId: string;
+        locationId: string;
+        value: number | string;
+        delta?: number;
+      };
+      return {
+        id: ev.id,
+        occurredAt: ev.occurredAt,
+        sequence: ev.sequence,
+        taskDefinitionId: payload.taskDefinitionId,
+        locationId: payload.locationId,
+        value: payload.value,
+        delta: payload.delta ?? null,
+      };
+    });
+    return { events: result };
   });
 }
