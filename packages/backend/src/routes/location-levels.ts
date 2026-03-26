@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { createLocationLevelSchema } from "@progress-sheet/shared";
+import { createLocationLevelSchema, updateLocationLevelSchema } from "@progress-sheet/shared";
 import { prisma } from "../db.js";
 import { requireTenant } from "../auth.js";
 
@@ -29,6 +29,24 @@ export async function locationLevelsRoutes(app: FastifyInstance) {
       },
     });
     return reply.status(201).send(level);
+  });
+
+  app.patch("/location-levels/:id", async (request, reply) => {
+    const auth = (request as { auth?: { tenantId: string } }).auth!;
+    const { id } = request.params as { id: string };
+    const level = await prisma.locationLevel.findFirst({
+      where: { id, tenantId: auth.tenantId },
+    });
+    if (!level) return reply.status(404).send({ error: "Nivel no encontrado" });
+    const body = updateLocationLevelSchema.parse(request.body);
+    const updated = await prisma.locationLevel.update({
+      where: { id },
+      data: {
+        ...(body.name !== undefined && { name: body.name }),
+        ...(body.order !== undefined && { order: body.order }),
+      },
+    });
+    return reply.send(updated);
   });
 
   app.delete("/location-levels/:id", async (request, reply) => {

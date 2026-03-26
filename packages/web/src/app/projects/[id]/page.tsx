@@ -51,6 +51,10 @@ export default function ProjectDetailPage() {
   const [newLevelOrder, setNewLevelOrder] = useState(0);
   const [showAddLevel, setShowAddLevel] = useState(false);
 
+  const [editingLevelId, setEditingLevelId] = useState<string | null>(null);
+  const [editLevelName, setEditLevelName] = useState("");
+  const [editLevelOrder, setEditLevelOrder] = useState(0);
+
   const [selectedDimensionIds, setSelectedDimensionIds] = useState<Record<string, boolean>>({});
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [newDimName, setNewDimName] = useState("");
@@ -190,6 +194,18 @@ export default function ProjectDetailPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["location-levels"] });
       await queryClient.refetchQueries({ queryKey: ["location-levels"] });
+    },
+  });
+
+  const updateLevel = useMutation({
+    mutationFn: (body: { id: string; name?: string; order?: number }) =>
+      locationLevelsApi.update(body.id, { name: body.name, order: body.order }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["location-levels"] });
+      await queryClient.refetchQueries({ queryKey: ["location-levels"] });
+      setEditingLevelId(null);
+      setEditLevelName("");
+      setEditLevelOrder(0);
     },
   });
 
@@ -1074,12 +1090,36 @@ export default function ProjectDetailPage() {
         <>
           {/* Ubicaciones */}
           <section style={{ marginBottom: "2rem" }}>
-        <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Niveles</h2>
+        <details
+          style={{
+            padding: "0.75rem",
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            marginBottom: "1rem",
+          }}
+        >
+          <summary
+            style={{
+              cursor: "pointer",
+              color: "var(--text)",
+              fontSize: "1.1rem",
+              fontWeight: 600,
+              listStyle: "none",
+              userSelect: "none",
+            }}
+          >
+            Niveles{" "}
+            <span style={{ color: "var(--muted)", fontWeight: 400, fontSize: "0.95rem" }}>
+              ({levels.length})
+            </span>
+          </summary>
+          <div style={{ marginTop: "0.75rem" }}>
         {(levels.length === 0 || showAddLevel) ? (
           <div
             style={{
               padding: "1rem",
-              background: "var(--surface)",
+              background: "var(--bg)",
               border: "1px solid var(--border)",
               borderRadius: 8,
               marginBottom: "1rem",
@@ -1108,7 +1148,7 @@ export default function ProjectDetailPage() {
             />
             <input
               type="number"
-              min={0}
+              // Permitir negativos para subsuelos
               placeholder="Orden"
               value={newLevelOrder}
               onChange={(e) => setNewLevelOrder(Number(e.target.value))}
@@ -1156,22 +1196,6 @@ export default function ProjectDetailPage() {
             )}
           </div>
         ) : null}
-        {levels.length > 0 && !showAddLevel && (
-          <button
-            type="button"
-            onClick={() => setShowAddLevel(true)}
-            style={{
-              padding: "0.5rem 1rem",
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: 6,
-              color: "var(--text)",
-              marginBottom: "1rem",
-            }}
-          >
-            + Agregar nivel de ubicación
-          </button>
-        )}
         {levels.length > 0 && (
           <div style={{ marginBottom: "1rem" }}>
             <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginBottom: "0.5rem" }}>Niveles definidos</p>
@@ -1185,9 +1209,6 @@ export default function ProjectDetailPage() {
                 <li
                   key={l.id}
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
                     padding: "0.5rem 0.75rem",
                     background: "var(--surface)",
                     border: "1px solid var(--border)",
@@ -1195,32 +1216,145 @@ export default function ProjectDetailPage() {
                     marginBottom: 4,
                   }}
                 >
-                  <span style={{ color: "var(--text)" }}>{l.name}</span>
-                  <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>Orden: {l.order}</span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      deleteLevel.mutate(l.id);
-                    }}
-                    disabled={deleteLevel.isPending}
-                    style={{
-                      padding: "0.25rem 0.5rem",
-                      fontSize: "0.85rem",
-                      background: "transparent",
-                      border: "1px solid #ef4444",
-                      borderRadius: 4,
-                      color: "#ef4444",
-                    }}
-                  >
-                    {deleteLevel.isPending ? "…" : "Borrar"}
-                  </button>
+                  {editingLevelId === l.id ? (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
+                      <input
+                        value={editLevelName}
+                        onChange={(e) => setEditLevelName(e.target.value)}
+                        placeholder="Nombre del nivel"
+                        style={{
+                          flex: "1 1 240px",
+                          padding: "0.5rem",
+                          background: "var(--bg)",
+                          border: "1px solid var(--border)",
+                          borderRadius: 6,
+                          color: "var(--text)",
+                        }}
+                      />
+                      <input
+                        type="number"
+                        value={editLevelOrder}
+                        onChange={(e) => setEditLevelOrder(Number(e.target.value))}
+                        placeholder="Orden"
+                        style={{
+                          width: 110,
+                          padding: "0.5rem",
+                          background: "var(--bg)",
+                          border: "1px solid var(--border)",
+                          borderRadius: 6,
+                          color: "var(--text)",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => updateLevel.mutate({ id: l.id, name: editLevelName.trim(), order: editLevelOrder })}
+                        disabled={!editLevelName.trim() || updateLevel.isPending}
+                        style={{
+                          padding: "0.35rem 0.75rem",
+                          background: "var(--accent)",
+                          color: "white",
+                          border: "none",
+                          borderRadius: 6,
+                        }}
+                      >
+                        {updateLevel.isPending ? "Guardando…" : "Guardar"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingLevelId(null);
+                          setEditLevelName("");
+                          setEditLevelOrder(0);
+                        }}
+                        disabled={updateLevel.isPending}
+                        style={{
+                          padding: "0.35rem 0.75rem",
+                          background: "transparent",
+                          border: "1px solid var(--border)",
+                          borderRadius: 6,
+                          color: "var(--text)",
+                        }}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+                      <div style={{ display: "flex", flexDirection: "column" }}>
+                        <span style={{ color: "var(--text)" }}>{l.name}</span>
+                        <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>Orden: {l.order}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingLevelId(l.id);
+                            setEditLevelName(l.name);
+                            setEditLevelOrder(l.order);
+                          }}
+                          style={{
+                            padding: "0.25rem 0.5rem",
+                            fontSize: "0.85rem",
+                            background: "transparent",
+                            border: "1px solid var(--border)",
+                            borderRadius: 4,
+                            color: "var(--text)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            deleteLevel.mutate(l.id);
+                          }}
+                          disabled={deleteLevel.isPending}
+                          style={{
+                            padding: "0.25rem 0.5rem",
+                            fontSize: "0.85rem",
+                            background: "transparent",
+                            border: "1px solid #ef4444",
+                            borderRadius: 4,
+                            color: "#ef4444",
+                          }}
+                        >
+                          {deleteLevel.isPending ? "…" : "Borrar"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
           </div>
         )}
+
+        {/* Botón Agregar nivel abajo de la lista */}
+        {levels.length > 0 && !showAddLevel && (
+          <button
+            type="button"
+            onClick={() => setShowAddLevel(true)}
+            style={{
+              padding: "0.5rem 1rem",
+              background: "var(--bg)",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              color: "var(--text)",
+              marginBottom: "1rem",
+            }}
+          >
+            + Agregar nivel de ubicación
+          </button>
+        )}
+
+          </div>
+        </details>
+
+        {/* División visual entre Niveles y Ubicaciones */}
+        <div style={{ height: 1, background: "var(--border)", margin: "1rem 0" }} />
 
         <h3 style={{ fontSize: "1rem", margin: "1rem 0 0.5rem 0" }}>
           Ubicaciones (unidades funcionales, ambientes, etc)

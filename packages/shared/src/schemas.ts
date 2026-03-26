@@ -10,8 +10,17 @@ export const updateProjectSchema = createProjectSchema.partial();
 
 export const createLocationLevelSchema = z.object({
   name: z.string().min(1).max(100),
-  order: z.number().int().min(0),
+  order: z.number().int(),
 });
+
+export const updateLocationLevelSchema = z
+  .object({
+    name: z.string().min(1).max(100).optional(),
+    order: z.number().int().optional(),
+  })
+  .refine((data) => data.name !== undefined || data.order !== undefined, {
+    message: "Al menos uno de name u order debe enviarse",
+  });
 
 export const createLocationSchema = z.object({
   projectId: z.string().uuid(),

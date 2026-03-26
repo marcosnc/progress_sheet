@@ -111,6 +111,11 @@ export const locationLevelsApi = {
       method: "POST",
       body: JSON.stringify({ name, order }),
     }),
+  update: (id: string, body: { name?: string; order?: number }) =>
+    api<{ id: string; name: string; order: number }>(`/location-levels/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   delete: (levelId: string) =>
     api(`/location-levels/${levelId}`, { method: "DELETE" }),
 };
