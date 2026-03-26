@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { createDimensionSchema } from "@progress-sheet/shared";
+import { createDimensionSchema, updateDimensionSchema } from "@progress-sheet/shared";
 import { prisma } from "../db.js";
 import { requireTenant } from "../auth.js";
 
@@ -30,6 +30,24 @@ export async function dimensionsRoutes(app: FastifyInstance) {
       },
     });
     return reply.status(201).send(dimension);
+  });
+
+  app.patch("/dimensions/:id", async (request, reply) => {
+    const auth = (request as { auth?: { tenantId: string } }).auth!;
+    const { id } = request.params as { id: string };
+    const dimension = await prisma.dimension.findFirst({
+      where: { id, tenantId: auth.tenantId },
+    });
+    if (!dimension) return reply.status(404).send({ error: "Dimensión no encontrada" });
+    const body = updateDimensionSchema.parse(request.body);
+    const updated = await prisma.dimension.update({
+      where: { id },
+      data: {
+        ...(body.name !== undefined && { name: body.name }),
+        ...(body.order !== undefined && { order: body.order }),
+      },
+    });
+    return reply.send(updated);
   });
 
   app.delete("/dimensions/:id", async (request, reply) => {

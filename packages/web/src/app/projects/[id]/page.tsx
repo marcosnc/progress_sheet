@@ -13,6 +13,7 @@ import {
   locationsApi,
   dimensionsApi,
 } from "@/lib/api";
+import { ListRow } from "@/components/ListRow";
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -60,6 +61,10 @@ export default function ProjectDetailPage() {
   const [newDimName, setNewDimName] = useState("");
   const [newDimKey, setNewDimKey] = useState("");
   const [showAddDim, setShowAddDim] = useState(false);
+
+  const [editingDimensionId, setEditingDimensionId] = useState<string | null>(null);
+  const [editDimName, setEditDimName] = useState("");
+  const [editDimOrder, setEditDimOrder] = useState(0);
 
   const [progressTaskId, setProgressTaskId] = useState("");
   const [progressLocationId, setProgressLocationId] = useState("");
@@ -179,6 +184,14 @@ export default function ProjectDetailPage() {
     },
   });
 
+  const deleteTask = useMutation({
+    mutationFn: (body: { planId: string; taskId: string }) => plansApi.deleteTask(id, body.planId, body.taskId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["plans", id] });
+      await queryClient.refetchQueries({ queryKey: ["plans", id] });
+    },
+  });
+
   const createLevel = useMutation({
     mutationFn: () => locationLevelsApi.create(newLevelName, newLevelOrder),
     onSuccess: () => {
@@ -232,6 +245,18 @@ export default function ProjectDetailPage() {
     mutationFn: (dimId: string) => dimensionsApi.delete(dimId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["dimensions"] });
+    },
+  });
+
+  const updateDimension = useMutation({
+    mutationFn: (body: { id: string; name?: string; order?: number }) =>
+      dimensionsApi.update(body.id, { name: body.name, order: body.order }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["dimensions"] });
+      await queryClient.refetchQueries({ queryKey: ["dimensions"] });
+      setEditingDimensionId(null);
+      setEditDimName("");
+      setEditDimOrder(0);
     },
   });
 
@@ -547,7 +572,7 @@ export default function ProjectDetailPage() {
             </p>
             {(currentPlan.taskDefinitions?.length ?? 0) > 0 && (
               tasksViewMode === "lista" ? (
-                <ul style={{ listStyle: "none", padding: 0, margin: "0 0 1rem 0" }}>
+                <ul className="ps-list" style={{ margin: "0 0 1rem 0" }}>
                   {currentPlan.taskDefinitions?.map((t) => {
                     let tagNames: string[] = [];
                     try {
@@ -557,64 +582,71 @@ export default function ProjectDetailPage() {
                       /**/
                     }
                     return (
-                      <li
-                        key={t.id}
-                        style={{
-                          padding: "0.5rem",
-                          background: "var(--surface)",
-                          border: "1px solid var(--border)",
-                          borderRadius: 6,
-                          marginBottom: 4,
-                        }}
-                      >
-                        {t.name}{" "}
-                        <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>({t.progressValueType})</span>
-                        {tagNames.length > 0 && (
-                          <span style={{ marginLeft: "0.5rem", fontSize: "0.85rem" }}>
-                            —{" "}
-                            {tagNames.map((n) => (
-                              <span
-                                key={n}
-                                style={{
-                                  display: "inline-block",
-                                  marginRight: "0.25rem",
-                                  padding: "0.1rem 0.4rem",
-                                  background: "var(--bg)",
-                                  border: "1px solid var(--border)",
-                                  borderRadius: 4,
-                                  color: "var(--muted)",
+                      <li key={t.id}>
+                        <ListRow
+                          left={
+                            <>
+                              {t.name}{" "}
+                              <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>({t.progressValueType})</span>
+                              {tagNames.length > 0 && (
+                                <span style={{ marginLeft: "0.5rem", fontSize: "0.85rem" }}>
+                                  —{" "}
+                                  {tagNames.map((n) => (
+                                    <span
+                                      key={n}
+                                      style={{
+                                        display: "inline-block",
+                                        marginRight: "0.25rem",
+                                        padding: "0.1rem 0.4rem",
+                                        background: "var(--bg)",
+                                        border: "1px solid var(--border)",
+                                        borderRadius: 4,
+                                        color: "var(--muted)",
+                                      }}
+                                    >
+                                      {n}
+                                    </span>
+                                  ))}
+                                </span>
+                              )}
+                            </>
+                          }
+                          actionsRight={
+                            <>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  startEditingTask(t);
                                 }}
+                                className="ps-btn"
                               >
-                                {n}
-                              </span>
-                            ))}
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            startEditingTask(t);
-                          }}
-                          style={{
-                            marginLeft: "0.5rem",
-                            padding: "0.2rem 0.5rem",
-                            fontSize: "0.85rem",
-                            background: "transparent",
-                            border: "1px solid var(--border)",
-                            borderRadius: 4,
-                            color: "var(--muted)",
-                          }}
-                        >
-                          Editar
-                        </button>
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (typeof window !== "undefined" && window.confirm("¿Borrar esta tarea?")) {
+                                    deleteTask.mutate({ planId: currentPlan.id, taskId: t.id });
+                                  }
+                                }}
+                                disabled={deleteTask.isPending}
+                                className="ps-btn ps-btnDanger"
+                              >
+                                Borrar
+                              </button>
+                            </>
+                          }
+                        />
                       </li>
                     );
                   })}
                 </ul>
               ) : (
-                <ul style={{ listStyle: "none", padding: 0, margin: "0 0 1rem 0" }}>
+                <ul className="ps-list" style={{ margin: "0 0 1rem 0" }}>
                   {planTaskDefinitions
                     .filter((t) => (t.parentTaskDefinitionId ?? null) === null)
                     .map((root) => {
@@ -631,15 +663,10 @@ export default function ProjectDetailPage() {
                         const isExpanded = expandedTaskIds.has(t.id);
                         const treeToggleWidth = 26;
                         return (
-                          <li key={t.id} style={{ marginBottom: 4, marginLeft: level * 14 }}>
-                            <div
-                              style={{
-                                padding: "0.5rem",
-                                background: "var(--surface)",
-                                border: "1px solid var(--border)",
-                                borderRadius: 6,
-                              }}
-                            >
+                          <li key={t.id} style={{ marginLeft: level * 14 }}>
+                            <ListRow
+                              left={
+                                <>
                               {hasChildren ? (
                                 <button
                                   type="button"
@@ -693,28 +720,40 @@ export default function ProjectDetailPage() {
                                   ))}
                                 </span>
                               )}
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  startEditingTask(t);
-                                }}
-                                style={{
-                                  marginLeft: "0.5rem",
-                                  padding: "0.2rem 0.5rem",
-                                  fontSize: "0.85rem",
-                                  background: "transparent",
-                                  border: "1px solid var(--border)",
-                                  borderRadius: 4,
-                                  color: "var(--muted)",
-                                }}
-                              >
-                                Editar
-                              </button>
-                            </div>
+                                </>
+                              }
+                              actionsRight={
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      startEditingTask(t);
+                                    }}
+                                    className="ps-btn"
+                                  >
+                                    Editar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      if (typeof window !== "undefined" && window.confirm("¿Borrar esta tarea?")) {
+                                        deleteTask.mutate({ planId: currentPlan.id, taskId: t.id });
+                                      }
+                                    }}
+                                    disabled={deleteTask.isPending}
+                                    className="ps-btn ps-btnDanger"
+                                  >
+                                    Borrar
+                                  </button>
+                                </>
+                              }
+                            />
                             {hasChildren && isExpanded ? (
-                              <ul style={{ listStyle: "none", padding: 0, marginTop: 6 }}>
+                              <ul className="ps-list" style={{ marginTop: 6 }}>
                                 {children.map((c) => renderNode(c, level + 1))}
                               </ul>
                             ) : null}
@@ -951,42 +990,101 @@ export default function ProjectDetailPage() {
           Las dimensiones son etiquetas para agrupar y filtrar tareas. Definí las que necesites (ej. Proveedor, Tipo de ambiente) y luego, al crear cada tarea en &quot;Agregar tarea&quot;, seleccioná qué dimensiones aplican a esa tarea.
         </p>
         {dimensions.length > 0 && (
-          <ul style={{ listStyle: "none", padding: 0, margin: "0 0 0.75rem 0" }}>
+          <ul className="ps-list" style={{ margin: "0 0 0.75rem 0" }}>
             {dimensions.map((d) => (
-              <li
-                key={d.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "0.5rem 0.75rem",
-                  background: "var(--surface)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 6,
-                  marginBottom: 4,
-                }}
-              >
-                <span style={{ color: "var(--text)" }}>{d.name}</span>
-                <code style={{ fontSize: "0.85rem", color: "var(--muted)", marginRight: "auto", marginLeft: "0.5rem" }}>{d.key}</code>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    deleteDimension.mutate(d.id);
-                  }}
-                  disabled={deleteDimension.isPending}
-                  style={{
-                    padding: "0.25rem 0.5rem",
-                    fontSize: "0.85rem",
-                    background: "transparent",
-                    border: "1px solid #ef4444",
-                    borderRadius: 4,
-                    color: "#ef4444",
-                  }}
-                >
-                  Borrar
-                </button>
+              <li key={d.id}>
+                {editingDimensionId === d.id ? (
+                  <div className="ps-row">
+                    <div className="ps-rowMain" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                      <input
+                        value={editDimName}
+                        onChange={(e) => setEditDimName(e.target.value)}
+                        placeholder="Nombre"
+                        style={{
+                          flex: "1 1 220px",
+                          padding: "0.5rem",
+                          background: "var(--bg)",
+                          border: "1px solid var(--border)",
+                          borderRadius: 6,
+                          color: "var(--text)",
+                        }}
+                      />
+                      <input
+                        type="number"
+                        value={editDimOrder}
+                        onChange={(e) => setEditDimOrder(Number(e.target.value))}
+                        placeholder="Orden"
+                        style={{
+                          width: 110,
+                          padding: "0.5rem",
+                          background: "var(--bg)",
+                          border: "1px solid var(--border)",
+                          borderRadius: 6,
+                          color: "var(--text)",
+                        }}
+                      />
+                      <code style={{ fontSize: "0.85rem", color: "var(--muted)", alignSelf: "center" }}>{d.key}</code>
+                    </div>
+                    <div className="ps-rowActions">
+                      <button
+                        type="button"
+                        onClick={() => updateDimension.mutate({ id: d.id, name: editDimName.trim(), order: editDimOrder })}
+                        disabled={!editDimName.trim() || updateDimension.isPending}
+                        className="ps-btn ps-btnPrimary"
+                      >
+                        {updateDimension.isPending ? "Guardando…" : "Guardar"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingDimensionId(null);
+                          setEditDimName("");
+                          setEditDimOrder(0);
+                        }}
+                        disabled={updateDimension.isPending}
+                        className="ps-btn"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <ListRow
+                    left={
+                      <>
+                        <span>{d.name}</span>{" "}
+                        <code style={{ fontSize: "0.85rem", color: "var(--muted)", marginLeft: "0.5rem" }}>{d.key}</code>
+                      </>
+                    }
+                    actionsRight={
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingDimensionId(d.id);
+                            setEditDimName(d.name);
+                            setEditDimOrder(d.order);
+                          }}
+                          className="ps-btn"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (typeof window !== "undefined" && window.confirm("¿Borrar esta dimensión?")) {
+                              deleteDimension.mutate(d.id);
+                            }
+                          }}
+                          disabled={deleteDimension.isPending}
+                          className="ps-btn ps-btnDanger"
+                        >
+                          Borrar
+                        </button>
+                      </>
+                    }
+                  />
+                )}
               </li>
             ))}
           </ul>
@@ -1204,20 +1302,12 @@ export default function ProjectDetailPage() {
                 {deleteLevel.error instanceof Error ? deleteLevel.error.message : "Error al borrar"}
               </p>
             )}
-            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            <ul className="ps-list">
               {levels.map((l) => (
-                <li
-                  key={l.id}
-                  style={{
-                    padding: "0.5rem 0.75rem",
-                    background: "var(--surface)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 6,
-                    marginBottom: 4,
-                  }}
-                >
+                <li key={l.id}>
                   {editingLevelId === l.id ? (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
+                    <div className="ps-row" style={{ alignItems: "stretch" }}>
+                      <div className="ps-rowMain" style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
                       <input
                         value={editLevelName}
                         onChange={(e) => setEditLevelName(e.target.value)}
@@ -1245,86 +1335,66 @@ export default function ProjectDetailPage() {
                           color: "var(--text)",
                         }}
                       />
-                      <button
-                        type="button"
-                        onClick={() => updateLevel.mutate({ id: l.id, name: editLevelName.trim(), order: editLevelOrder })}
-                        disabled={!editLevelName.trim() || updateLevel.isPending}
-                        style={{
-                          padding: "0.35rem 0.75rem",
-                          background: "var(--accent)",
-                          color: "white",
-                          border: "none",
-                          borderRadius: 6,
-                        }}
-                      >
-                        {updateLevel.isPending ? "Guardando…" : "Guardar"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingLevelId(null);
-                          setEditLevelName("");
-                          setEditLevelOrder(0);
-                        }}
-                        disabled={updateLevel.isPending}
-                        style={{
-                          padding: "0.35rem 0.75rem",
-                          background: "transparent",
-                          border: "1px solid var(--border)",
-                          borderRadius: 6,
-                          color: "var(--text)",
-                        }}
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
-                      <div style={{ display: "flex", flexDirection: "column" }}>
-                        <span style={{ color: "var(--text)" }}>{l.name}</span>
-                        <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>Orden: {l.order}</span>
                       </div>
-                      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                      <div className="ps-rowActions">
+                        <button
+                          type="button"
+                          onClick={() => updateLevel.mutate({ id: l.id, name: editLevelName.trim(), order: editLevelOrder })}
+                          disabled={!editLevelName.trim() || updateLevel.isPending}
+                          className="ps-btn ps-btnPrimary"
+                        >
+                          {updateLevel.isPending ? "Guardando…" : "Guardar"}
+                        </button>
                         <button
                           type="button"
                           onClick={() => {
-                            setEditingLevelId(l.id);
-                            setEditLevelName(l.name);
-                            setEditLevelOrder(l.order);
+                            setEditingLevelId(null);
+                            setEditLevelName("");
+                            setEditLevelOrder(0);
                           }}
-                          style={{
-                            padding: "0.25rem 0.5rem",
-                            fontSize: "0.85rem",
-                            background: "transparent",
-                            border: "1px solid var(--border)",
-                            borderRadius: 4,
-                            color: "var(--text)",
-                            cursor: "pointer",
-                          }}
+                          disabled={updateLevel.isPending}
+                          className="ps-btn"
                         >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            deleteLevel.mutate(l.id);
-                          }}
-                          disabled={deleteLevel.isPending}
-                          style={{
-                            padding: "0.25rem 0.5rem",
-                            fontSize: "0.85rem",
-                            background: "transparent",
-                            border: "1px solid #ef4444",
-                            borderRadius: 4,
-                            color: "#ef4444",
-                          }}
-                        >
-                          {deleteLevel.isPending ? "…" : "Borrar"}
+                          Cancelar
                         </button>
                       </div>
                     </div>
+                  ) : (
+                    <ListRow
+                      left={
+                        <div style={{ display: "flex", flexDirection: "column" }}>
+                          <span>{l.name}</span>
+                          <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>Orden: {l.order}</span>
+                        </div>
+                      }
+                      actionsRight={
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingLevelId(l.id);
+                              setEditLevelName(l.name);
+                              setEditLevelOrder(l.order);
+                            }}
+                            className="ps-btn"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              deleteLevel.mutate(l.id);
+                            }}
+                            disabled={deleteLevel.isPending}
+                            className="ps-btn ps-btnDanger"
+                          >
+                            {deleteLevel.isPending ? "…" : "Borrar"}
+                          </button>
+                        </>
+                      }
+                    />
                   )}
                 </li>
               ))}
@@ -1395,18 +1465,11 @@ export default function ProjectDetailPage() {
         )}
 
         {locations.length > 0 && (
-          <ul style={{ listStyle: "none", padding: 0, margin: "0 0 1rem 0" }}>
+          <ul className="ps-list" style={{ margin: "0 0 1rem 0" }}>
             {locationsViewMode === "lista"
               ? locations.map((loc) => (
                   <li
                     key={loc.id}
-                    style={{
-                      padding: "0.5rem",
-                      background: "var(--surface)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 6,
-                      marginBottom: 4,
-                    }}
                   >
                     {editingLocationId === loc.id ? (
                       <div style={{ padding: "0.25rem 0" }}>
@@ -1565,67 +1628,54 @@ export default function ProjectDetailPage() {
                         </button>
                       </div>
                     ) : (
-                      <>
-                        {loc.name} <code style={{ fontSize: "0.85rem", color: "var(--muted)" }}>{loc.path}</code>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingLocationId(loc.id);
-                            setEditLocName(loc.name);
-                        setEditLocParentId(loc.parentId ?? "");
-                            setEditLocTaskIds(loc.taskDefinitionIds ?? []);
-                          }}
-                          style={{
-                            marginLeft: "0.5rem",
-                            padding: "0.2rem 0.5rem",
-                            fontSize: "0.85rem",
-                            background: "transparent",
-                            border: "1px solid var(--border)",
-                            borderRadius: 4,
-                            color: "var(--text)",
-                            cursor: "pointer",
-                          }}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setReplicatingFromLocationId(loc.id)}
-                          style={{
-                            marginLeft: "0.25rem",
-                            padding: "0.2rem 0.5rem",
-                            fontSize: "0.85rem",
-                            background: "transparent",
-                            border: "1px solid var(--border)",
-                            borderRadius: 4,
-                            color: "var(--text)",
-                            cursor: "pointer",
-                          }}
-                        >
-                          Replicar N veces
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (typeof window !== "undefined" && window.confirm("¿Borrar esta ubicación y las que cuelgan de ella?")) {
-                              deleteLocation.mutate(loc.id);
-                            }
-                          }}
-                          disabled={deleteLocation.isPending}
-                          style={{
-                            marginLeft: "0.25rem",
-                            padding: "0.2rem 0.5rem",
-                            fontSize: "0.85rem",
-                            background: "transparent",
-                            border: "1px solid var(--border)",
-                            borderRadius: 4,
-                            color: "#dc2626",
-                            cursor: "pointer",
-                          }}
-                        >
-                          Borrar
-                        </button>
-                      </>
+                      <ListRow
+                        left={
+                          <>
+                            {loc.name}{" "}
+                            <code style={{ fontSize: "0.85rem", color: "var(--muted)" }}>{loc.path}</code>
+                          </>
+                        }
+                        actionsLeft={
+                          <button
+                            type="button"
+                            onClick={() => setReplicatingFromLocationId(loc.id)}
+                            className="ps-btn"
+                          >
+                            Replicar
+                          </button>
+                        }
+                        actionsRight={
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingLocationId(loc.id);
+                                setEditLocName(loc.name);
+                                setEditLocParentId(loc.parentId ?? "");
+                                setEditLocTaskIds(loc.taskDefinitionIds ?? []);
+                              }}
+                              className="ps-btn"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (
+                                  typeof window !== "undefined" &&
+                                  window.confirm("¿Borrar esta ubicación y las que cuelgan de ella?")
+                                ) {
+                                  deleteLocation.mutate(loc.id);
+                                }
+                              }}
+                              disabled={deleteLocation.isPending}
+                              className="ps-btn ps-btnDanger"
+                            >
+                              Borrar
+                            </button>
+                          </>
+                        }
+                      />
                     )}
                   </li>
                 ))
@@ -1644,19 +1694,10 @@ export default function ProjectDetailPage() {
                     const isExpanded = expandedLocationIds.has(loc.id);
                     const treeToggleWidth = 26;
                     return (
-                      <li
-                        key={loc.id}
-                        style={{
-                          padding: "0.5rem",
-                          background: "var(--surface)",
-                          border: "1px solid var(--border)",
-                          borderRadius: 6,
-                          marginBottom: 4,
-                          marginLeft: level * 14,
-                        }}
-                      >
+                      <li key={loc.id}>
                         {editingLocationId === loc.id ? (
-                          <div style={{ padding: "0.25rem 0" }}>
+                          <div className="ps-row" style={{ marginLeft: level * 14, alignItems: "stretch" }}>
+                            <div className="ps-rowMain" style={{ padding: "0.25rem 0" }}>
                             <input
                               placeholder="Nombre"
                               value={editLocName}
@@ -1714,18 +1755,13 @@ export default function ProjectDetailPage() {
                                 </div>
                               </div>
                             )}
-                            <div style={{ display: "flex", gap: "0.5rem" }}>
+                            </div>
+                            <div className="ps-rowActions">
                               <button
                                 type="button"
                                 onClick={() => updateLocation.mutate()}
                                 disabled={!editLocName.trim() || updateLocation.isPending}
-                                style={{
-                                  padding: "0.35rem 0.75rem",
-                                  background: "var(--accent)",
-                                  color: "white",
-                                  border: "none",
-                                  borderRadius: 6,
-                                }}
+                                className="ps-btn ps-btnPrimary"
                               >
                                 {updateLocation.isPending ? "Guardando…" : "Guardar"}
                               </button>
@@ -1737,20 +1773,23 @@ export default function ProjectDetailPage() {
                                   setEditLocParentId("");
                                   setEditLocTaskIds([]);
                                 }}
-                                style={{
-                                  padding: "0.35rem 0.75rem",
-                                  background: "transparent",
-                                  border: "1px solid var(--border)",
-                                  borderRadius: 6,
-                                  color: "var(--text)",
-                                }}
+                                className="ps-btn"
                               >
                                 Cancelar
                               </button>
                             </div>
                           </div>
                         ) : replicatingFromLocationId === loc.id ? (
-                          <div style={{ padding: "0.25rem 0", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem" }}>
+                          <div
+                            className="ps-row"
+                            style={{
+                              marginLeft: level * 14,
+                              paddingTop: "0.25rem",
+                              paddingBottom: "0.25rem",
+                              alignItems: "center",
+                            }}
+                          >
+                            <div className="ps-rowMain" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem" }}>
                             <input
                               type="number"
                               min={1}
@@ -1780,132 +1819,105 @@ export default function ProjectDetailPage() {
                                 color: "var(--text)",
                               }}
                             />
-                            <button
-                              type="button"
-                              onClick={() => replicateFromLocation.mutate()}
-                              disabled={replicateFromCount < 1 || replicateFromLocation.isPending}
-                              style={{
-                                padding: "0.35rem 0.75rem",
-                                background: "var(--accent)",
-                                color: "white",
-                                border: "none",
-                                borderRadius: 6,
-                              }}
-                            >
-                              {replicateFromLocation.isPending ? "Creando…" : "Crear copias"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setReplicatingFromLocationId(null);
-                                setReplicateFromPrefix("");
-                              }}
-                              style={{
-                                padding: "0.35rem 0.75rem",
-                                background: "transparent",
-                                border: "1px solid var(--border)",
-                                borderRadius: 6,
-                                color: "var(--text)",
-                              }}
-                            >
-                              Cancelar
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            {hasChildren ? (
+                            </div>
+                            <div className="ps-rowActions">
                               <button
                                 type="button"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  setExpandedLocationIds((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(loc.id)) next.delete(loc.id);
-                                    else next.add(loc.id);
-                                    return next;
-                                  });
-                                }}
-                                style={{
-                                  width: treeToggleWidth,
-                                  marginRight: "0.5rem",
-                                  padding: "0.1rem 0.35rem",
-                                  borderRadius: 4,
-                                  border: "1px solid var(--border)",
-                                  background: "transparent",
-                                  color: "var(--muted)",
-                                  cursor: "pointer",
-                                }}
-                                aria-label={isExpanded ? "Colapsar" : "Expandir"}
+                                onClick={() => replicateFromLocation.mutate()}
+                                disabled={replicateFromCount < 1 || replicateFromLocation.isPending}
+                                className="ps-btn ps-btnPrimary"
                               >
-                                {isExpanded ? "-" : "+"}
+                                {replicateFromLocation.isPending ? "Creando…" : "Crear copias"}
                               </button>
-                            ) : (
-                              <span style={{ display: "inline-block", width: treeToggleWidth, marginRight: "0.5rem" }} />
-                            )}
-                            {loc.name} <code style={{ fontSize: "0.85rem", color: "var(--muted)" }}>{loc.path}</code>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingLocationId(loc.id);
-                                setEditLocName(loc.name);
-                                setEditLocParentId(loc.parentId ?? "");
-                                setEditLocTaskIds(loc.taskDefinitionIds ?? []);
-                              }}
-                              style={{
-                                marginLeft: "0.5rem",
-                                padding: "0.2rem 0.5rem",
-                                fontSize: "0.85rem",
-                                background: "transparent",
-                                border: "1px solid var(--border)",
-                                borderRadius: 4,
-                                color: "var(--text)",
-                                cursor: "pointer",
-                              }}
-                            >
-                              Editar
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setReplicatingFromLocationId(loc.id)}
-                              style={{
-                                marginLeft: "0.25rem",
-                                padding: "0.2rem 0.5rem",
-                                fontSize: "0.85rem",
-                                background: "transparent",
-                                border: "1px solid var(--border)",
-                                borderRadius: 4,
-                                color: "var(--text)",
-                                cursor: "pointer",
-                              }}
-                            >
-                              Replicar N veces
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (typeof window !== "undefined" && window.confirm("¿Borrar esta ubicación y las que cuelgan de ella?")) {
-                                  deleteLocation.mutate(loc.id);
-                                }
-                              }}
-                              disabled={deleteLocation.isPending}
-                              style={{
-                                marginLeft: "0.25rem",
-                                padding: "0.2rem 0.5rem",
-                                fontSize: "0.85rem",
-                                background: "transparent",
-                                border: "1px solid var(--border)",
-                                borderRadius: 4,
-                                color: "#dc2626",
-                                cursor: "pointer",
-                              }}
-                            >
-                              Borrar
-                            </button>
-                          </>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReplicatingFromLocationId(null);
+                                  setReplicateFromPrefix("");
+                                }}
+                                className="ps-btn"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <ListRow
+                            indentPx={level * 14}
+                            left={
+                              <>
+                                <span style={{ display: "inline-flex", width: treeToggleWidth, marginRight: "0.5rem" }}>
+                                  {hasChildren ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setExpandedLocationIds((prev) => {
+                                          const next = new Set(prev);
+                                          if (next.has(loc.id)) next.delete(loc.id);
+                                          else next.add(loc.id);
+                                          return next;
+                                        });
+                                      }}
+                                      className="ps-btn"
+                                      style={{ padding: "0.1rem 0.35rem", width: treeToggleWidth, color: "var(--muted)" }}
+                                      aria-label={isExpanded ? "Colapsar" : "Expandir"}
+                                    >
+                                      {isExpanded ? "-" : "+"}
+                                    </button>
+                                  ) : (
+                                    <span style={{ display: "inline-block", width: treeToggleWidth }} />
+                                  )}
+                                </span>
+                                {loc.name}{" "}
+                                <code style={{ fontSize: "0.85rem", color: "var(--muted)" }}>{loc.path}</code>
+                              </>
+                            }
+                              actionsLeft={
+                                <button
+                                  type="button"
+                                  onClick={() => setReplicatingFromLocationId(loc.id)}
+                                  className="ps-btn"
+                                >
+                                  Replicar
+                                </button>
+                              }
+                              actionsRight={
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingLocationId(loc.id);
+                                      setEditLocName(loc.name);
+                                      setEditLocParentId(loc.parentId ?? "");
+                                      setEditLocTaskIds(loc.taskDefinitionIds ?? []);
+                                    }}
+                                    className="ps-btn"
+                                  >
+                                    Editar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (
+                                        typeof window !== "undefined" &&
+                                        window.confirm("¿Borrar esta ubicación y las que cuelgan de ella?")
+                                      ) {
+                                        deleteLocation.mutate(loc.id);
+                                      }
+                                    }}
+                                    disabled={deleteLocation.isPending}
+                                    className="ps-btn ps-btnDanger"
+                                  >
+                                    Borrar
+                                  </button>
+                                </>
+                              }
+                            />
                         )}
                         {hasChildren && isExpanded ? (
-                          <ul style={{ listStyle: "none", padding: 0, marginTop: 6 }}>
+                          <ul className="ps-list" style={{ marginTop: 6 }}>
                             {children.map((c) => renderNode(c, level + 1))}
                           </ul>
                         ) : null}

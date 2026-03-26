@@ -184,6 +184,36 @@ export async function planRoutes(app: FastifyInstance) {
     return updated;
   });
 
+  app.delete("/projects/:projectId/plans/:planId/tasks/:taskId", async (request, reply) => {
+    const auth = (request as { auth?: { tenantId: string } }).auth!;
+    const { projectId, planId, taskId } = request.params as { projectId: string; planId: string; taskId: string };
+    const plan = await prisma.planVersion.findFirst({
+      where: { id: planId, projectId, project: { tenantId: auth.tenantId } },
+    });
+    if (!plan) return reply.status(404).send({ error: "Plan not found" });
+    const task = await prisma.taskDefinition.findFirst({
+      where: { id: taskId, planVersionId: planId },
+      select: { id: true },
+    });
+    if (!task) return reply.status(404).send({ error: "Task not found" });
+
+    // Limpiar referencias para evitar inconsistencias
+    await prisma.locationTask.deleteMany({ where: { taskDefinitionId: taskId } });
+    await prisma.progressSnapshot.deleteMany({ where: { projectId, taskDefinitionId: taskId } });
+    await prisma.taskDependency.deleteMany({
+      where: { planVersionId: planId, OR: [{ taskId }, { dependsOnTaskId: taskId }] },
+    });
+
+    // Dejar a los hijos sin padre (visual y referencial)
+    await prisma.taskDefinition.updateMany({
+      where: { planVersionId: planId, parentTaskDefinitionId: taskId },
+      data: { parentTaskDefinitionId: null },
+    });
+
+    await prisma.taskDefinition.delete({ where: { id: taskId } });
+    return reply.status(204).send();
+  });
+
   app.post("/projects/:projectId/plans/:planId/dependencies", async (request, reply) => {
     const auth = (request as { auth?: { tenantId: string } }).auth!;
     const { projectId, planId } = request.params as { projectId: string; planId: string };

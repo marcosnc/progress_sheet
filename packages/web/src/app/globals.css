@@ -37,3 +37,70 @@ button {
 input, select, textarea {
   font: inherit;
 }
+
+/* Shared list row patterns */
+.ps-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.ps-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 4px;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.ps-row:hover {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+.ps-rowLeft {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ps-rowMain {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.ps-rowActions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.ps-btn {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.85rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+}
+
+.ps-btnDanger {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.ps-btnPrimary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}

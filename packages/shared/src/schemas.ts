@@ -110,6 +110,15 @@ export const createDimensionSchema = z.object({
   order: z.number().int().min(0).optional(),
 });
 
+export const updateDimensionSchema = z
+  .object({
+    name: z.string().min(1).max(100).optional(),
+    order: z.number().int().min(0).optional(),
+  })
+  .refine((data) => data.name !== undefined || data.order !== undefined, {
+    message: "Al menos uno de name u order debe enviarse",
+  });
+
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 export type CreateLocationInput = z.infer<typeof createLocationSchema>;
 export type CreateTaskDefinitionInput = z.infer<typeof createTaskDefinitionSchema>;

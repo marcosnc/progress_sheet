@@ -101,6 +101,8 @@ export const plansApi = {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
+  deleteTask: (projectId: string, planId: string, taskId: string) =>
+    api(`/projects/${projectId}/plans/${planId}/tasks/${taskId}`, { method: "DELETE" }),
 };
 
 export const locationLevelsApi = {
@@ -169,6 +171,11 @@ export const dimensionsApi = {
   create: (body: { name: string; key: string; order?: number }) =>
     api<{ id: string; name: string; key: string; order: number }>("/dimensions", {
       method: "POST",
+      body: JSON.stringify(body),
+    }),
+  update: (id: string, body: { name?: string; order?: number }) =>
+    api<{ id: string; name: string; key: string; order: number }>(`/dimensions/${id}`, {
+      method: "PATCH",
       body: JSON.stringify(body),
     }),
   delete: (id: string) => api(`/dimensions/${id}`, { method: "DELETE" }),
