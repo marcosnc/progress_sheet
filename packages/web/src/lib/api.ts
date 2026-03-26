@@ -124,7 +124,17 @@ export const locationLevelsApi = {
 
 export const locationsApi = {
   list: (projectId: string) =>
-    api<{ locations: { id: string; name: string; path: string; parentId: string | null; levelId: string; taskDefinitionIds: string[] }[] }>(
+    api<{
+      locations: {
+        id: string;
+        name: string;
+        path: string;
+        parentId: string | null;
+        levelId: string;
+        taskDefinitionIds: string[];
+        taskAssignments?: { taskDefinitionId: string; totalQuantity: number | null }[];
+      }[];
+    }>(
       `/projects/${projectId}/locations`
     ),
   create: (
@@ -146,7 +156,12 @@ export const locationsApi = {
   update: (
     projectId: string,
     locationId: string,
-    body: { name?: string; parentId?: string | null; taskDefinitionIds?: string[] }
+    body: {
+      name?: string;
+      parentId?: string | null;
+      taskDefinitionIds?: string[];
+      taskAssignments?: { taskDefinitionId: string; totalQuantity?: number | null }[];
+    }
   ) =>
     api<{ id: string; name: string; path: string; taskDefinitionIds: string[] }>(
       `/projects/${projectId}/locations/${locationId}`,

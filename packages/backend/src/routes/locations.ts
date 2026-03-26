@@ -23,11 +23,15 @@ export async function locationsRoutes(app: FastifyInstance) {
     const locations = await prisma.location.findMany({
       where: { projectId },
       orderBy: { path: "asc" },
-      include: { locationTasks: { select: { taskDefinitionId: true } } },
+      include: { locationTasks: true },
     });
     const result = locations.map((loc) => ({
       ...loc,
       taskDefinitionIds: loc.locationTasks.map((lt) => lt.taskDefinitionId),
+      taskAssignments: loc.locationTasks.map((lt) => ({
+        taskDefinitionId: lt.taskDefinitionId,
+        totalQuantity: ((lt as unknown as { totalQuantity?: number | null }).totalQuantity ?? null),
+      })),
       locationTasks: undefined,
     }));
     return { locations: result };
@@ -77,11 +81,15 @@ export async function locationsRoutes(app: FastifyInstance) {
     }
     const withTasks = await prisma.location.findUnique({
       where: { id: location.id },
-      include: { locationTasks: { select: { taskDefinitionId: true } } },
+      include: { locationTasks: true },
     });
     return reply.status(201).send({
       ...withTasks,
       taskDefinitionIds: withTasks!.locationTasks.map((lt) => lt.taskDefinitionId),
+      taskAssignments: withTasks!.locationTasks.map((lt) => ({
+        taskDefinitionId: lt.taskDefinitionId,
+        totalQuantity: ((lt as unknown as { totalQuantity?: number | null }).totalQuantity ?? null),
+      })),
       locationTasks: undefined,
     });
   });
@@ -207,18 +215,37 @@ export async function locationsRoutes(app: FastifyInstance) {
       }
     }
 
-    if (body.taskDefinitionIds !== undefined) {
+    const taskIdsFromAssignments =
+      body.taskAssignments !== undefined ? body.taskAssignments.map((a) => a.taskDefinitionId) : null;
+
+    if (body.taskDefinitionIds !== undefined || body.taskAssignments !== undefined) {
       await prisma.locationTask.deleteMany({ where: { locationId } });
-      if (body.taskDefinitionIds.length > 0) {
+      const idsToApply = body.taskDefinitionIds ?? taskIdsFromAssignments ?? [];
+      if (idsToApply.length > 0) {
         const validTaskIds = await prisma.taskDefinition.findMany({
           where: {
-            id: { in: body.taskDefinitionIds },
+            id: { in: idsToApply },
             planVersion: { projectId },
           },
-          select: { id: true },
+          select: { id: true, progressValueType: true },
         });
+
+        const totalsById =
+          body.taskAssignments !== undefined
+            ? new Map(
+                body.taskAssignments.map((a) => [
+                  a.taskDefinitionId,
+                  a.totalQuantity === undefined ? null : a.totalQuantity,
+                ])
+              )
+            : new Map<string, number | null>();
+
         await prisma.locationTask.createMany({
-          data: validTaskIds.map((task) => ({ locationId, taskDefinitionId: task.id })),
+          data: validTaskIds.map((task) => ({
+            locationId,
+            taskDefinitionId: task.id,
+            totalQuantity: task.progressValueType === "quantity" ? (totalsById.get(task.id) ?? null) : null,
+          })),
           skipDuplicates: true,
         });
       }
@@ -226,11 +253,15 @@ export async function locationsRoutes(app: FastifyInstance) {
 
     const updated = await prisma.location.findUnique({
       where: { id: locationId },
-      include: { locationTasks: { select: { taskDefinitionId: true } } },
+      include: { locationTasks: true },
     });
     return reply.send({
       ...updated,
       taskDefinitionIds: updated!.locationTasks.map((lt) => lt.taskDefinitionId),
+      taskAssignments: updated!.locationTasks.map((lt) => ({
+        taskDefinitionId: lt.taskDefinitionId,
+        totalQuantity: ((lt as unknown as { totalQuantity?: number | null }).totalQuantity ?? null),
+      })),
       locationTasks: undefined,
     });
   });

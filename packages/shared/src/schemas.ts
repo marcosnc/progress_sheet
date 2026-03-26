@@ -94,10 +94,25 @@ export const updateLocationSchema = z
     name: z.string().min(1).max(255).optional(),
     parentId: z.string().uuid().nullable().optional(),
     taskDefinitionIds: z.array(z.string().uuid()).optional(),
+    taskAssignments: z
+      .array(
+        z.object({
+          taskDefinitionId: z.string().uuid(),
+          totalQuantity: z.number().nonnegative().nullable().optional(),
+        })
+      )
+      .optional(),
   })
-  .refine((data) => data.name !== undefined || data.parentId !== undefined || data.taskDefinitionIds !== undefined, {
-    message: "Al menos uno de name, parentId o taskDefinitionIds debe enviarse",
-  });
+  .refine(
+    (data) =>
+      data.name !== undefined ||
+      data.parentId !== undefined ||
+      data.taskDefinitionIds !== undefined ||
+      data.taskAssignments !== undefined,
+    {
+      message: "Al menos uno de name, parentId, taskDefinitionIds o taskAssignments debe enviarse",
+    }
+  );
 
 export const replicateFromLocationSchema = z.object({
   count: z.number().int().min(1).max(500),

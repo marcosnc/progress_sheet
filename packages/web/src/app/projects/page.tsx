@@ -4,9 +4,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { projectsApi } from "@/lib/api";
 import { useState } from "react";
+import { ListRow } from "@/components/ListRow";
 
 export default function ProjectsPage() {
   const [name, setName] = useState("");
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [editProjectName, setEditProjectName] = useState("");
   const queryClient = useQueryClient();
   const { data, isLoading, error } = useQuery({
     queryKey: ["projects"],
@@ -17,6 +20,15 @@ export default function ProjectsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       setName("");
+    },
+  });
+
+  const update = useMutation({
+    mutationFn: (body: { id: string; name: string }) => projectsApi.update(body.id, body.name),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      setEditingProjectId(null);
+      setEditProjectName("");
     },
   });
 
@@ -65,21 +77,73 @@ export default function ProjectsPage() {
           Crear
         </button>
       </form>
-      <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+      <ul className="ps-list">
         {projects.map((p) => (
-          <li
-            key={p.id}
-            style={{
-              padding: "1rem",
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: 8,
-              marginBottom: "0.5rem",
-            }}
-          >
-            <Link href={`/projects/${p.id}`} style={{ color: "inherit", fontWeight: 500 }}>
-              {p.name}
-            </Link>
+          <li key={p.id}>
+            {editingProjectId === p.id ? (
+              <div className="ps-row">
+                <div className="ps-rowMain">
+                  <input
+                    value={editProjectName}
+                    onChange={(e) => setEditProjectName(e.target.value)}
+                    placeholder="Nombre del proyecto"
+                    style={{
+                      width: "100%",
+                      padding: "0.5rem",
+                      background: "var(--bg)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 6,
+                      color: "var(--text)",
+                    }}
+                  />
+                </div>
+                <div className="ps-rowActions">
+                  <button
+                    type="button"
+                    onClick={() => update.mutate({ id: p.id, name: editProjectName.trim() })}
+                    disabled={!editProjectName.trim() || update.isPending}
+                    className="ps-btn ps-btnPrimary"
+                  >
+                    {update.isPending ? "Guardando…" : "Guardar"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingProjectId(null);
+                      setEditProjectName("");
+                    }}
+                    disabled={update.isPending}
+                    className="ps-btn"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <ListRow
+                left={
+                  <Link href={`/projects/${p.id}`} style={{ color: "inherit", fontWeight: 500 }}>
+                    {p.name}
+                  </Link>
+                }
+                actionsRight={
+                  <>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setEditingProjectId(p.id);
+                        setEditProjectName(p.name);
+                      }}
+                      className="ps-btn"
+                    >
+                      Editar
+                    </button>
+                  </>
+                }
+              />
+            )}
           </li>
         ))}
       </ul>

@@ -97,6 +97,7 @@ model LocationTask {
   id                String   @id @default(uuid())
   locationId        String
   taskDefinitionId String
+  totalQuantity     Float?
   location          Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
   @@unique([locationId, taskDefinitionId])
   @@index([locationId])

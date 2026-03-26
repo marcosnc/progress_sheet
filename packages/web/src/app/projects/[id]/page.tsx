@@ -78,6 +78,7 @@ export default function ProjectDetailPage() {
   // Para la pantalla "Asignaciones": editar el set de tareas asociadas a una ubicación
   const [assignmentLocationId, setAssignmentLocationId] = useState("");
   const [assignmentTaskIds, setAssignmentTaskIds] = useState<string[]>([]);
+  const [assignmentTotalQtyByTaskId, setAssignmentTotalQtyByTaskId] = useState<Record<string, string>>({});
 
   // Filtro UX para la pantalla "Consulta de estado" por dimensión
   const [dimensionFilterId, setDimensionFilterId] = useState<string>("");
@@ -323,8 +324,8 @@ export default function ProjectDetailPage() {
 
   // Actualiza solo el vínculo "tareas ↔ ubicación" (taskDefinitionIds) sin tocar el nombre.
   const updateLocationTaskDefinitions = useMutation({
-    mutationFn: (body: { locationId: string; taskDefinitionIds: string[] }) =>
-      locationsApi.update(id, body.locationId, { taskDefinitionIds: body.taskDefinitionIds }),
+    mutationFn: (body: { locationId: string; taskAssignments: { taskDefinitionId: string; totalQuantity?: number | null }[] }) =>
+      locationsApi.update(id, body.locationId, { taskAssignments: body.taskAssignments }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["locations", id] });
       await queryClient.invalidateQueries({ queryKey: ["project", id] });
@@ -377,7 +378,15 @@ export default function ProjectDetailPage() {
   if (error) return <p style={{ padding: "2rem", color: "#ef4444" }}>Error: {String(error)}</p>;
 
   const currentPlan = plans?.plans?.[0];
-  const locations = (locationsData?.locations ?? project?.locations ?? []) as { id: string; name: string; path: string; parentId: string | null; levelId: string; taskDefinitionIds?: string[] }[];
+  const locations = (locationsData?.locations ?? project?.locations ?? []) as {
+    id: string;
+    name: string;
+    path: string;
+    parentId: string | null;
+    levelId: string;
+    taskDefinitionIds?: string[];
+    taskAssignments?: { taskDefinitionId: string; totalQuantity: number | null }[];
+  }[];
   const progressSelectedLocation = locations.find((l) => l.id === progressLocationId);
   const tasksForProgressLocation = (currentPlan?.taskDefinitions ?? []).filter((t) =>
     progressSelectedLocation?.taskDefinitionIds?.includes(t.id)
@@ -501,10 +510,10 @@ export default function ProjectDetailPage() {
         <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
           {(
             [
-              ["espacial", "Espacial"],
+              ["espacial", "Espacios"],
               ["tareas", "Tareas"],
               ["dimensiones", "Dimensiones"],
-              ["asignaciones", "Asignaciones"],
+              ["asignaciones", "Tareas por ubicación"],
               ["validacion", "Validación"],
             ] as const
           ).map(([key, label]) => (
@@ -2227,7 +2236,7 @@ export default function ProjectDetailPage() {
             Asociá tareas a ubicaciones. Esto define qué se puede registrar como avance para cada combinación.
           </p>
           <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: "-0.35rem", marginBottom: "0.75rem" }}>
-            Nota: el metrado total planificado por tarea/ubicación todavía no está modelado en el backend; por ahora se registra el valor de avance.
+            Si una tarea tiene tipo de avance <strong>Cantidad</strong>, podés definir el total planificado en esa ubicación (ej. 15 m²).
           </p>
 
           {!currentPlan ? (
@@ -2244,6 +2253,11 @@ export default function ProjectDetailPage() {
                       setAssignmentLocationId(locId);
                       const loc = locations.find((l) => l.id === locId);
                       setAssignmentTaskIds(loc?.taskDefinitionIds ?? []);
+                      const totals: Record<string, string> = {};
+                      for (const a of loc?.taskAssignments ?? []) {
+                        totals[a.taskDefinitionId] = a.totalQuantity == null ? "" : String(a.totalQuantity);
+                      }
+                      setAssignmentTotalQtyByTaskId(totals);
                     }}
                     style={{
                       width: "100%",
@@ -2272,23 +2286,68 @@ export default function ProjectDetailPage() {
                     <p style={{ color: "var(--muted)", marginBottom: "0.75rem" }}>No hay tareas en el plan.</p>
                   ) : (
                     <>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem 1rem" }}>
-                        {planTaskDefinitions.map((t) => (
-                          <label key={t.id} style={{ display: "flex", alignItems: "center", gap: "0.35rem", cursor: "pointer" }}>
-                            <input
-                              type="checkbox"
-                              checked={assignmentTaskIds.includes(t.id)}
-                              onChange={(e) => {
-                                const checked = e.target.checked;
-                                setAssignmentTaskIds((prev) =>
-                                  checked ? [...prev, t.id] : prev.filter((id) => id !== t.id)
-                                );
-                              }}
-                            />
-                            <span style={{ fontSize: "0.9rem", color: "var(--text)" }}>{t.name}</span>
-                          </label>
-                        ))}
-                      </div>
+                      <ul className="ps-list">
+                        {planTaskDefinitions.map((t) => {
+                          const checked = assignmentTaskIds.includes(t.id);
+                          const isQuantity = t.progressValueType === "quantity";
+                          const unit = t.quantityUnit?.trim() || "";
+                          return (
+                            <li key={t.id}>
+                              <ListRow
+                                left={
+                                  <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={(e) => {
+                                        const nextChecked = e.target.checked;
+                                        setAssignmentTaskIds((prev) =>
+                                          nextChecked ? [...prev, t.id] : prev.filter((id) => id !== t.id)
+                                        );
+                                        if (!nextChecked) {
+                                          setAssignmentTotalQtyByTaskId((prev) => {
+                                            const next = { ...prev };
+                                            delete next[t.id];
+                                            return next;
+                                          });
+                                        }
+                                      }}
+                                    />
+                                    <span style={{ fontSize: "0.9rem", color: "var(--text)" }}>{t.name}</span>
+                                  </label>
+                                }
+                                actionsRight={
+                                  checked && isQuantity ? (
+                                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                      <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>Total</span>
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        step="any"
+                                        value={assignmentTotalQtyByTaskId[t.id] ?? ""}
+                                        onChange={(e) =>
+                                          setAssignmentTotalQtyByTaskId((prev) => ({ ...prev, [t.id]: e.target.value }))
+                                        }
+                                        style={{
+                                          width: 140,
+                                          padding: "0.35rem 0.5rem",
+                                          background: "var(--bg)",
+                                          border: "1px solid var(--border)",
+                                          borderRadius: 6,
+                                          color: "var(--text)",
+                                        }}
+                                      />
+                                      <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{unit || "unid."}</span>
+                                    </div>
+                                  ) : (
+                                    <span />
+                                  )
+                                }
+                              />
+                            </li>
+                          );
+                        })}
+                      </ul>
                       {updateLocationTaskDefinitions.error && (
                         <p style={{ color: "#ef4444", marginTop: "0.75rem" }}>
                           {updateLocationTaskDefinitions.error instanceof Error
@@ -2307,7 +2366,14 @@ export default function ProjectDetailPage() {
                   onClick={() =>
                     updateLocationTaskDefinitions.mutate({
                       locationId: assignmentLocationId,
-                      taskDefinitionIds: assignmentTaskIds,
+                      taskAssignments: assignmentTaskIds.map((taskDefinitionId) => {
+                        const t = planTaskDefinitions.find((x) => x.id === taskDefinitionId);
+                        if (!t) return { taskDefinitionId };
+                        if (t.progressValueType !== "quantity") return { taskDefinitionId, totalQuantity: null };
+                        const raw = (assignmentTotalQtyByTaskId[taskDefinitionId] ?? "").trim();
+                        const parsed = raw === "" ? null : Number(raw);
+                        return { taskDefinitionId, totalQuantity: parsed != null && Number.isFinite(parsed) ? parsed : null };
+                      }),
                     })
                   }
                   disabled={
@@ -2331,6 +2397,7 @@ export default function ProjectDetailPage() {
                   onClick={() => {
                     setAssignmentLocationId("");
                     setAssignmentTaskIds([]);
+                    setAssignmentTotalQtyByTaskId({});
                   }}
                   disabled={updateLocationTaskDefinitions.isPending}
                   style={{
