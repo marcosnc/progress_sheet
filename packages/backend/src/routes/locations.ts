@@ -196,7 +196,7 @@ export async function locationsRoutes(app: FastifyInstance) {
           select: { id: true },
         });
         await prisma.locationTask.createMany({
-          data: validTaskIds.map((taskDefinitionId) => ({ locationId, taskDefinitionId })),
+          data: validTaskIds.map((task) => ({ locationId, taskDefinitionId: task.id })),
           skipDuplicates: true,
         });
       }

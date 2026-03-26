@@ -28,6 +28,7 @@ export const createPlanVersionSchema = z.object({
 export const createTaskDefinitionSchema = z.object({
   planVersionId: z.string().uuid(),
   templateId: z.string().uuid().nullable().optional(),
+  parentTaskDefinitionId: z.string().uuid().nullable().optional(),
   name: z.string().min(1).max(255),
   progressValueType: progressValueTypeSchema,
   quantityUnit: z.string().max(50).nullable().optional(),
@@ -38,6 +39,7 @@ export const createTaskDefinitionSchema = z.object({
 export const updateTaskDefinitionSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   progressValueType: progressValueTypeSchema.optional(),
+  parentTaskDefinitionId: z.string().uuid().nullable().optional(),
   quantityUnit: z.string().max(50).nullable().optional(),
   stateOptions: z.array(z.string().max(100)).nullable().optional(),
   dimensionValues: z.record(z.string(), z.string()).optional(),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -22,6 +22,7 @@ export default function ProjectDetailPage() {
   const [newTaskName, setNewTaskName] = useState("");
   const [newTaskType, setNewTaskType] = useState<"percent" | "quantity" | "state">("percent");
   const [newTaskUnit, setNewTaskUnit] = useState("");
+  const [newTaskParentTaskId, setNewTaskParentTaskId] = useState<string>("");
   const [showAddTask, setShowAddTask] = useState(false);
 
   const [newLocName, setNewLocName] = useState("");
@@ -71,6 +72,12 @@ export default function ProjectDetailPage() {
 
   // Filtro UX para la pantalla "Consulta de estado" por dimensión
   const [dimensionFilterId, setDimensionFilterId] = useState<string>("");
+
+  // Vista de tareas: lista o jerarquía
+  const [tasksViewMode, setTasksViewMode] = useState<"lista" | "jerarquia">("lista");
+
+  // Árbol jerárquico: qué nodos están expandidos
+  const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(new Set());
 
   const { data: project, isLoading, error } = useQuery({
     queryKey: ["project", id],
@@ -130,12 +137,14 @@ export default function ProjectDetailPage() {
         quantityUnit: newTaskType === "quantity" ? newTaskUnit || "m²" : null,
         stateOptions: newTaskType === "state" ? ["pendiente", "en curso", "terminado"] : null,
         dimensionValues: Object.keys(buildTaskDimensionValues()).length ? buildTaskDimensionValues() : undefined,
+        parentTaskDefinitionId: newTaskParentTaskId ? newTaskParentTaskId : null,
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["plans", id] });
       await queryClient.refetchQueries({ queryKey: ["plans", id] });
       setNewTaskName("");
       setSelectedDimensionIds({});
+      setNewTaskParentTaskId("");
       setShowAddTask(false);
     },
   });
@@ -148,12 +157,14 @@ export default function ProjectDetailPage() {
         quantityUnit: newTaskType === "quantity" ? newTaskUnit || "m²" : null,
         stateOptions: newTaskType === "state" ? ["pendiente", "en curso", "terminado"] : null,
         dimensionValues: buildTaskDimensionValues(),
+        parentTaskDefinitionId: newTaskParentTaskId ? newTaskParentTaskId : null,
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["plans", id] });
       await queryClient.refetchQueries({ queryKey: ["plans", id] });
       setNewTaskName("");
       setSelectedDimensionIds({});
+      setNewTaskParentTaskId("");
       setShowAddTask(false);
       setEditingTaskId(null);
     },
@@ -345,18 +356,34 @@ export default function ProjectDetailPage() {
   const items = progress?.items ?? [];
   const projections = velocity?.projections ?? [];
 
+  // Expandir por defecto solo las ramas raíz al cargar/el cambiar de plan.
+  useEffect(() => {
+    if (!currentPlan) return;
+    const roots =
+      (currentPlan.taskDefinitions ?? []).filter((t) => (t.parentTaskDefinitionId ?? null) === null).map((t) => t.id);
+    setExpandedTaskIds(new Set(roots));
+  }, [currentPlan?.id]);
+
   const filteredItems =
     dimensionFilterId && dimensionFilterId.trim()
       ? items.filter((it) => (taskDimensionIdsByTaskId[it.taskDefinitionId] ?? []).includes(dimensionFilterId))
       : items;
 
   function startEditingTask(
-    t: { id: string; name: string; progressValueType: string; quantityUnit?: string | null; dimensionValues?: string | null }
+    t: {
+      id: string;
+      name: string;
+      progressValueType: string;
+      quantityUnit?: string | null;
+      dimensionValues?: string | null;
+      parentTaskDefinitionId?: string | null;
+    }
   ) {
     setEditingTaskId(t.id);
     setNewTaskName(t.name);
     setNewTaskType(t.progressValueType as "percent" | "quantity" | "state");
     setNewTaskUnit(t.quantityUnit ?? "");
+    setNewTaskParentTaskId(t.parentTaskDefinitionId ?? "");
     try {
       const dv = t.dimensionValues ? (JSON.parse(t.dimensionValues) as Record<string, string>) : {};
       const sel: Record<string, boolean> = {};
@@ -375,6 +402,8 @@ export default function ProjectDetailPage() {
     setEditingTaskId(null);
     setNewTaskName("");
     setSelectedDimensionIds({});
+    setNewTaskUnit("");
+    setNewTaskParentTaskId("");
   }
 
   return (
@@ -447,77 +476,216 @@ export default function ProjectDetailPage() {
       {activeCategory === "planificacion" && activePlanningTab === "tareas" && (
         <section style={{ marginBottom: "2rem" }}>
         <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Plan actual</h2>
+        <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => setTasksViewMode("lista")}
+            style={{
+              padding: "0.45rem 0.85rem",
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              background: tasksViewMode === "lista" ? "var(--accent)" : "var(--surface)",
+              color: tasksViewMode === "lista" ? "white" : "var(--text)",
+              cursor: "pointer",
+            }}
+          >
+            Lista
+          </button>
+          <button
+            type="button"
+            onClick={() => setTasksViewMode("jerarquia")}
+            style={{
+              padding: "0.45rem 0.85rem",
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              background: tasksViewMode === "jerarquia" ? "var(--accent)" : "var(--surface)",
+              color: tasksViewMode === "jerarquia" ? "white" : "var(--text)",
+              cursor: "pointer",
+            }}
+          >
+            Jerarquía
+          </button>
+        </div>
         {currentPlan ? (
           <>
             <p style={{ color: "var(--muted)", marginBottom: "0.75rem" }}>
               Versión {currentPlan.version} — {currentPlan.taskDefinitions?.length ?? 0} tareas
             </p>
             {(currentPlan.taskDefinitions?.length ?? 0) > 0 && (
-              <ul style={{ listStyle: "none", padding: 0, margin: "0 0 1rem 0" }}>
-                {currentPlan.taskDefinitions?.map((t) => {
-                  let tagNames: string[] = [];
-                  try {
-                    const dv = t.dimensionValues ? JSON.parse(t.dimensionValues) as Record<string, string> : {};
-                    tagNames = dimensions.filter((d) => dv[d.id]).map((d) => d.name);
-                  } catch {
-                    /**/
-                  }
-                  return (
-                    <li
-                      key={t.id}
-                      style={{
-                        padding: "0.5rem",
-                        background: "var(--surface)",
-                        border: "1px solid var(--border)",
-                        borderRadius: 6,
-                        marginBottom: 4,
-                      }}
-                    >
-                      {t.name}{" "}
-                      <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>({t.progressValueType})</span>
-                      {tagNames.length > 0 && (
-                        <span style={{ marginLeft: "0.5rem", fontSize: "0.85rem" }}>
-                          — {tagNames.map((n) => (
-                            <span
-                              key={n}
-                              style={{
-                                display: "inline-block",
-                                marginRight: "0.25rem",
-                                padding: "0.1rem 0.4rem",
-                                background: "var(--bg)",
-                                border: "1px solid var(--border)",
-                                borderRadius: 4,
-                                color: "var(--muted)",
-                              }}
-                            >
-                              {n}
-                            </span>
-                          ))}
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          startEditingTask(t);
-                        }}
+              tasksViewMode === "lista" ? (
+                <ul style={{ listStyle: "none", padding: 0, margin: "0 0 1rem 0" }}>
+                  {currentPlan.taskDefinitions?.map((t) => {
+                    let tagNames: string[] = [];
+                    try {
+                      const dv = t.dimensionValues ? JSON.parse(t.dimensionValues) as Record<string, string> : {};
+                      tagNames = dimensions.filter((d) => dv[d.id]).map((d) => d.name);
+                    } catch {
+                      /**/
+                    }
+                    return (
+                      <li
+                        key={t.id}
                         style={{
-                          marginLeft: "0.5rem",
-                          padding: "0.2rem 0.5rem",
-                          fontSize: "0.85rem",
-                          background: "transparent",
+                          padding: "0.5rem",
+                          background: "var(--surface)",
                           border: "1px solid var(--border)",
-                          borderRadius: 4,
-                          color: "var(--muted)",
+                          borderRadius: 6,
+                          marginBottom: 4,
                         }}
                       >
-                        Editar
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+                        {t.name}{" "}
+                        <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>({t.progressValueType})</span>
+                        {tagNames.length > 0 && (
+                          <span style={{ marginLeft: "0.5rem", fontSize: "0.85rem" }}>
+                            —{" "}
+                            {tagNames.map((n) => (
+                              <span
+                                key={n}
+                                style={{
+                                  display: "inline-block",
+                                  marginRight: "0.25rem",
+                                  padding: "0.1rem 0.4rem",
+                                  background: "var(--bg)",
+                                  border: "1px solid var(--border)",
+                                  borderRadius: 4,
+                                  color: "var(--muted)",
+                                }}
+                              >
+                                {n}
+                              </span>
+                            ))}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            startEditingTask(t);
+                          }}
+                          style={{
+                            marginLeft: "0.5rem",
+                            padding: "0.2rem 0.5rem",
+                            fontSize: "0.85rem",
+                            background: "transparent",
+                            border: "1px solid var(--border)",
+                            borderRadius: 4,
+                            color: "var(--muted)",
+                          }}
+                        >
+                          Editar
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <ul style={{ listStyle: "none", padding: 0, margin: "0 0 1rem 0" }}>
+                  {planTaskDefinitions
+                    .filter((t) => (t.parentTaskDefinitionId ?? null) === null)
+                    .map((root) => {
+                      const renderNode = (t: typeof root, level: number) => {
+                        let tagNames: string[] = [];
+                        try {
+                          const dv = t.dimensionValues ? JSON.parse(t.dimensionValues) as Record<string, string> : {};
+                          tagNames = dimensions.filter((d) => dv[d.id]).map((d) => d.name);
+                        } catch {
+                          /**/
+                        }
+                        const children = planTaskDefinitions.filter((c) => (c.parentTaskDefinitionId ?? null) === t.id);
+                        const hasChildren = children.length > 0;
+                        const isExpanded = expandedTaskIds.has(t.id);
+                        return (
+                          <li key={t.id} style={{ marginBottom: 4, marginLeft: level * 14 }}>
+                            <div
+                              style={{
+                                padding: "0.5rem",
+                                background: "var(--surface)",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                              }}
+                            >
+                              {hasChildren && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setExpandedTaskIds((prev) => {
+                                      const next = new Set(prev);
+                                      if (next.has(t.id)) next.delete(t.id);
+                                      else next.add(t.id);
+                                      return next;
+                                    });
+                                  }}
+                                  style={{
+                                    marginRight: "0.5rem",
+                                    padding: "0.1rem 0.35rem",
+                                    borderRadius: 4,
+                                    border: "1px solid var(--border)",
+                                    background: "transparent",
+                                    color: "var(--muted)",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  {isExpanded ? "- " : "+ "}
+                                </button>
+                              )}
+                              {t.name}{" "}
+                              <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>({t.progressValueType})</span>
+                              {tagNames.length > 0 && (
+                                <span style={{ marginLeft: "0.5rem", fontSize: "0.85rem" }}>
+                                  —{" "}
+                                  {tagNames.map((n) => (
+                                    <span
+                                      key={n}
+                                      style={{
+                                        display: "inline-block",
+                                        marginRight: "0.25rem",
+                                        padding: "0.1rem 0.4rem",
+                                        background: "var(--bg)",
+                                        border: "1px solid var(--border)",
+                                        borderRadius: 4,
+                                        color: "var(--muted)",
+                                      }}
+                                    >
+                                      {n}
+                                    </span>
+                                  ))}
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  startEditingTask(t);
+                                }}
+                                style={{
+                                  marginLeft: "0.5rem",
+                                  padding: "0.2rem 0.5rem",
+                                  fontSize: "0.85rem",
+                                  background: "transparent",
+                                  border: "1px solid var(--border)",
+                                  borderRadius: 4,
+                                  color: "var(--muted)",
+                                }}
+                              >
+                                Editar
+                              </button>
+                            </div>
+                            {hasChildren && isExpanded ? (
+                              <ul style={{ listStyle: "none", padding: 0, marginTop: 6 }}>
+                                {children.map((c) => renderNode(c, level + 1))}
+                              </ul>
+                            ) : null}
+                          </li>
+                        );
+                      };
+                      return renderNode(root, 0);
+                    })}
+                </ul>
+              )
             )}
             {!showAddTask ? (
               <button
@@ -528,6 +696,7 @@ export default function ProjectDetailPage() {
                   setNewTaskType("percent");
                   setNewTaskUnit("");
                   setSelectedDimensionIds({});
+                  setNewTaskParentTaskId("");
                   setShowAddTask(true);
                 }}
                 style={{
@@ -583,6 +752,29 @@ export default function ProjectDetailPage() {
                     <option value="percent">Porcentaje (%)</option>
                     <option value="quantity">Cantidad (m², unidades…)</option>
                     <option value="state">Estado (pendiente / en curso / terminado)</option>
+                  </select>
+                </div>
+                <div style={{ marginBottom: "0.5rem" }}>
+                  <label style={{ marginRight: "0.5rem", color: "var(--muted)" }}>Tarea padre (opcional)</label>
+                  <select
+                    value={newTaskParentTaskId}
+                    onChange={(e) => setNewTaskParentTaskId(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "0.5rem",
+                      background: "var(--bg)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 6,
+                      color: "var(--text)",
+                    }}
+                    disabled={!currentPlan}
+                  >
+                    <option value="">Ninguna</option>
+                    {(currentPlan?.taskDefinitions ?? []).map((t) => (
+                      <option key={t.id} value={t.id} disabled={editingTaskId === t.id}>
+                        {t.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 {newTaskType === "quantity" && (

@@ -49,6 +49,7 @@ export interface PlanTaskAddedPayload {
   stateOptions?: string[] | null;
   dimensionValues?: Record<string, string>;
   templateId?: string | null;
+  parentTaskDefinitionId?: string | null;
 }
 
 export interface PlanTaskAddedEvent extends BaseEvent {

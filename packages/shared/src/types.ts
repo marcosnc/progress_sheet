@@ -43,6 +43,7 @@ export interface TaskDefinition {
   templateId: string | null;
   name: string;
   progressValueType: ProgressValueType;
+  parentTaskDefinitionId: string | null;
   /** For quantity: unit label e.g. "m²", "unidades". */
   quantityUnit: string | null;
   /** For state: allowed values e.g. ["pending", "in_progress", "done"]. */

@@ -128,12 +128,16 @@ model TaskDefinition {
   stateOptions       String?  // JSON array
   dimensionValues    String?  // JSON object
   createdAt          DateTime @default(now())
+  parentTaskDefinitionId String?
+  parentTaskDefinition   TaskDefinition? @relation("TaskHierarchy", fields: [parentTaskDefinitionId], references: [id], onDelete: SetNull)
+  childTaskDefinitions   TaskDefinition[] @relation("TaskHierarchy")
   planVersion        PlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Cascade)
   taskTemplate       TaskTemplate? @relation(fields: [templateId], references: [id])
   dependenciesFrom  TaskDependency[] @relation("DependsOn")
   dependenciesTo    TaskDependency[] @relation("RequiredBy")
   @@index([planVersionId])
   @@index([templateId])
+  @@index([parentTaskDefinitionId])
 }
 
 model TaskDependency {

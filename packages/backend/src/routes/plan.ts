@@ -81,6 +81,17 @@ export async function planRoutes(app: FastifyInstance) {
     });
     if (!plan) return reply.status(404).send({ error: "Plan not found" });
     const body = createTaskDefinitionSchema.parse(request.body);
+
+    if (body.parentTaskDefinitionId) {
+      const parent = await prisma.taskDefinition.findFirst({
+        where: { id: body.parentTaskDefinitionId, planVersionId: planId },
+        select: { id: true },
+      });
+      if (!parent) {
+        return reply.status(400).send({ error: "parentTaskDefinitionId inválida para este plan" });
+      }
+    }
+
     const task = await prisma.taskDefinition.create({
       data: {
         planVersionId: planId,
@@ -90,6 +101,7 @@ export async function planRoutes(app: FastifyInstance) {
         quantityUnit: body.quantityUnit ?? null,
         stateOptions: body.stateOptions ? JSON.stringify(body.stateOptions) : null,
         dimensionValues: body.dimensionValues ? JSON.stringify(body.dimensionValues) : null,
+        parentTaskDefinitionId: body.parentTaskDefinitionId ?? null,
       },
     });
     await appendEvent({
@@ -105,6 +117,7 @@ export async function planRoutes(app: FastifyInstance) {
         stateOptions: body.stateOptions ?? null,
         dimensionValues: body.dimensionValues ?? null,
         templateId: task.templateId,
+        parentTaskDefinitionId: body.parentTaskDefinitionId ?? null,
       },
     });
     return reply.status(201).send(task);
@@ -122,6 +135,39 @@ export async function planRoutes(app: FastifyInstance) {
     });
     if (!task) return reply.status(404).send({ error: "Task not found" });
     const body = updateTaskDefinitionSchema.parse(request.body);
+
+    if (body.parentTaskDefinitionId !== undefined) {
+      if (body.parentTaskDefinitionId === taskId) {
+        return reply.status(400).send({ error: "Una tarea no puede ser su propio padre" });
+      }
+
+      if (body.parentTaskDefinitionId) {
+        const parent = await prisma.taskDefinition.findFirst({
+          where: { id: body.parentTaskDefinitionId, planVersionId: planId },
+          select: { id: true },
+        });
+        if (!parent) {
+          return reply.status(400).send({ error: "parentTaskDefinitionId inválida para este plan" });
+        }
+
+        // Evitar ciclos: el padre no puede estar en el sub-árbol del task actual.
+        const descendants = new Set<string>();
+        let frontier: string[] = [taskId];
+        for (let i = 0; i < 30 && frontier.length > 0; i++) {
+          const children = await prisma.taskDefinition.findMany({
+            where: { planVersionId: planId, parentTaskDefinitionId: { in: frontier } },
+            select: { id: true },
+          });
+          frontier = children.map((c) => c.id);
+          for (const c of children) descendants.add(c.id);
+          if (descendants.has(body.parentTaskDefinitionId)) break;
+        }
+        if (descendants.has(body.parentTaskDefinitionId)) {
+          return reply.status(400).send({ error: "La relación padre-hijo genera un ciclo" });
+        }
+      }
+    }
+
     const updated = await prisma.taskDefinition.update({
       where: { id: taskId },
       data: {
@@ -130,6 +176,9 @@ export async function planRoutes(app: FastifyInstance) {
         ...(body.quantityUnit !== undefined && { quantityUnit: body.quantityUnit }),
         ...(body.stateOptions !== undefined && { stateOptions: body.stateOptions ? JSON.stringify(body.stateOptions) : null }),
         ...(body.dimensionValues !== undefined && { dimensionValues: body.dimensionValues ? JSON.stringify(body.dimensionValues) : null }),
+        ...(body.parentTaskDefinitionId !== undefined && {
+          parentTaskDefinitionId: body.parentTaskDefinitionId ?? null,
+        }),
       },
     });
     return updated;

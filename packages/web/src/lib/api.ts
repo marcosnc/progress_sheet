@@ -67,14 +67,14 @@ export const projectsApi = {
 
 export const plansApi = {
   list: (projectId: string) =>
-    api<{ plans: { id: string; version: number; taskDefinitions: { id: string; name: string; progressValueType: string; quantityUnit?: string | null; stateOptions?: string | null; dimensionValues?: string | null }[] }[] }>(
+    api<{ plans: { id: string; version: number; taskDefinitions: { id: string; name: string; progressValueType: string; quantityUnit?: string | null; stateOptions?: string | null; dimensionValues?: string | null; parentTaskDefinitionId?: string | null }[] }[] }>(
       `/projects/${projectId}/plans`
     ),
   get: (projectId: string, planId: string) =>
     api<{
       id: string;
       version: number;
-      taskDefinitions: { id: string; name: string; progressValueType: string; quantityUnit?: string | null; stateOptions?: string | null; dimensionValues?: string | null }[];
+      taskDefinitions: { id: string; name: string; progressValueType: string; quantityUnit?: string | null; stateOptions?: string | null; dimensionValues?: string | null; parentTaskDefinitionId?: string | null }[];
       taskDependencies: unknown[];
     }>(`/projects/${projectId}/plans/${planId}`),
   create: (projectId: string) =>
@@ -85,7 +85,7 @@ export const plansApi = {
   addTask: (
     projectId: string,
     planId: string,
-    body: { name: string; progressValueType: "percent" | "quantity" | "state"; quantityUnit?: string | null; stateOptions?: string[] | null; dimensionValues?: Record<string, string> }
+    body: { name: string; progressValueType: "percent" | "quantity" | "state"; quantityUnit?: string | null; stateOptions?: string[] | null; dimensionValues?: Record<string, string>; parentTaskDefinitionId?: string | null }
   ) =>
     api<{ id: string; name: string }>(`/projects/${projectId}/plans/${planId}/tasks`, {
       method: "POST",
@@ -95,7 +95,7 @@ export const plansApi = {
     projectId: string,
     planId: string,
     taskId: string,
-    body: { name?: string; progressValueType?: "percent" | "quantity" | "state"; quantityUnit?: string | null; stateOptions?: string[] | null; dimensionValues?: Record<string, string> }
+    body: { name?: string; progressValueType?: "percent" | "quantity" | "state"; quantityUnit?: string | null; stateOptions?: string[] | null; dimensionValues?: Record<string, string>; parentTaskDefinitionId?: string | null }
   ) =>
     api<{ id: string; name: string }>(`/projects/${projectId}/plans/${planId}/tasks/${taskId}`, {
       method: "PATCH",
