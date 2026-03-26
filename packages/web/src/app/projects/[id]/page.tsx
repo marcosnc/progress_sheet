@@ -59,7 +59,6 @@ export default function ProjectDetailPage() {
   const [selectedDimensionIds, setSelectedDimensionIds] = useState<Record<string, boolean>>({});
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [newDimName, setNewDimName] = useState("");
-  const [newDimKey, setNewDimKey] = useState("");
   const [showAddDim, setShowAddDim] = useState(false);
 
   const [editingDimensionId, setEditingDimensionId] = useState<string | null>(null);
@@ -224,11 +223,8 @@ export default function ProjectDetailPage() {
 
   const createDimension = useMutation({
     mutationFn: () => {
-      const key = newDimKey.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "_");
-      if (!key) throw new Error("La clave no puede quedar vacía");
       return dimensionsApi.create({
         name: newDimName.trim(),
-        key,
         order: dimensionsData?.dimensions?.length ?? 0,
       });
     },
@@ -236,7 +232,6 @@ export default function ProjectDetailPage() {
       await queryClient.invalidateQueries({ queryKey: ["dimensions"] });
       await queryClient.refetchQueries({ queryKey: ["dimensions"] });
       setNewDimName("");
-      setNewDimKey("");
       setShowAddDim(false);
     },
   });
@@ -1023,7 +1018,7 @@ export default function ProjectDetailPage() {
                           color: "var(--text)",
                         }}
                       />
-                      <code style={{ fontSize: "0.85rem", color: "var(--muted)", alignSelf: "center" }}>{d.key}</code>
+                      <span style={{ color: "var(--muted)", fontSize: "0.9rem", alignSelf: "center" }}>Orden: {d.order}</span>
                     </div>
                     <div className="ps-rowActions">
                       <button
@@ -1052,8 +1047,8 @@ export default function ProjectDetailPage() {
                   <ListRow
                     left={
                       <>
-                        <span>{d.name}</span>{" "}
-                        <code style={{ fontSize: "0.85rem", color: "var(--muted)", marginLeft: "0.5rem" }}>{d.key}</code>
+                        <span>{d.name}</span>
+                        <span style={{ color: "var(--muted)", fontSize: "0.9rem", marginLeft: "0.5rem" }}>Orden: {d.order}</span>
                       </>
                     }
                     actionsRight={
@@ -1126,20 +1121,6 @@ export default function ProjectDetailPage() {
                 color: "var(--text)",
               }}
             />
-            <input
-              placeholder="Clave (ej. proveedor, solo minúsculas y _)"
-              value={newDimKey}
-              onChange={(e) => setNewDimKey(e.target.value.replace(/\s/g, "_").toLowerCase().replace(/[^a-z0-9_]/g, "_"))}
-              style={{
-                width: "100%",
-                padding: "0.5rem",
-                marginBottom: "0.5rem",
-                background: "var(--bg)",
-                border: "1px solid var(--border)",
-                borderRadius: 6,
-                color: "var(--text)",
-              }}
-            />
             {createDimension.error && (
               <p style={{ color: "#ef4444", marginBottom: "0.5rem" }}>
                 {createDimension.error instanceof Error ? createDimension.error.message : "Error al crear la dimensión"}
@@ -1153,7 +1134,7 @@ export default function ProjectDetailPage() {
                   e.stopPropagation();
                   createDimension.mutate();
                 }}
-                disabled={!newDimName.trim() || !newDimKey.trim() || createDimension.isPending}
+                disabled={!newDimName.trim() || createDimension.isPending}
                 style={{
                   padding: "0.5rem 1rem",
                   background: "var(--accent)",
@@ -1166,7 +1147,7 @@ export default function ProjectDetailPage() {
               </button>
               <button
                 type="button"
-                onClick={() => { setShowAddDim(false); setNewDimName(""); setNewDimKey(""); }}
+                onClick={() => { setShowAddDim(false); setNewDimName(""); }}
                 style={{
                   padding: "0.5rem 1rem",
                   border: "1px solid var(--border)",

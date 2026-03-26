@@ -30,10 +30,8 @@ model Dimension {
   id        String   @id @default(uuid())
   tenantId  String
   name      String
-  key       String
   order     Int      @default(0)
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  @@unique([tenantId, key])
   @@index([tenantId])
 }
 

@@ -167,14 +167,14 @@ export const locationsApi = {
 
 export const dimensionsApi = {
   list: () =>
-    api<{ dimensions: { id: string; name: string; key: string; order: number }[] }>("/dimensions"),
-  create: (body: { name: string; key: string; order?: number }) =>
-    api<{ id: string; name: string; key: string; order: number }>("/dimensions", {
+    api<{ dimensions: { id: string; name: string; order: number }[] }>("/dimensions"),
+  create: (body: { name: string; order?: number }) =>
+    api<{ id: string; name: string; order: number }>("/dimensions", {
       method: "POST",
       body: JSON.stringify(body),
     }),
   update: (id: string, body: { name?: string; order?: number }) =>
-    api<{ id: string; name: string; key: string; order: number }>(`/dimensions/${id}`, {
+    api<{ id: string; name: string; order: number }>(`/dimensions/${id}`, {
       method: "PATCH",
       body: JSON.stringify(body),
     }),

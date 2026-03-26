@@ -106,7 +106,6 @@ export const replicateFromLocationSchema = z.object({
 
 export const createDimensionSchema = z.object({
   name: z.string().min(1).max(100),
-  key: z.string().min(1).max(50).regex(/^[a-z0-9_]+$/),
   order: z.number().int().min(0).optional(),
 });
 

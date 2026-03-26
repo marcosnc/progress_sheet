@@ -25,7 +25,6 @@ export async function dimensionsRoutes(app: FastifyInstance) {
       data: {
         tenantId: auth.tenantId,
         name: body.name,
-        key: body.key,
         order: body.order ?? 0,
       },
     });
