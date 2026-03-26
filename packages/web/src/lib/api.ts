@@ -139,7 +139,7 @@ export const locationsApi = {
   update: (
     projectId: string,
     locationId: string,
-    body: { name?: string; taskDefinitionIds?: string[] }
+    body: { name?: string; parentId?: string | null; taskDefinitionIds?: string[] }
   ) =>
     api<{ id: string; name: string; path: string; taskDefinitionIds: string[] }>(
       `/projects/${projectId}/locations/${locationId}`,

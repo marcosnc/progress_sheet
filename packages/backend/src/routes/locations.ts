@@ -157,26 +157,48 @@ export async function locationsRoutes(app: FastifyInstance) {
     if (!location) return reply.status(404).send({ error: "Location not found" });
     const body = updateLocationSchema.parse(request.body);
 
-    if (body.name !== undefined) {
-      const segment = body.name.replace(/\//g, "-").toLowerCase().replace(/\s+/g, "-");
-      let newPath: string;
-      if (location.parentId) {
+    // Cambios que afectan al path: nombre y/o padre.
+    if (body.parentId !== undefined || body.name !== undefined) {
+      if (body.parentId === locationId) {
+        return reply.status(400).send({ error: "Una ubicación no puede ser su propio padre" });
+      }
+
+      const desiredName = body.name ?? location.name;
+      const desiredParentId = body.parentId !== undefined ? body.parentId : (location.parentId ?? null);
+
+      const segment = desiredName.replace(/\//g, "-").toLowerCase().replace(/\s+/g, "-");
+      const oldPath = location.path;
+
+      let parentPath: string | null = null;
+      if (desiredParentId) {
         const parent = await prisma.location.findFirst({
-          where: { id: location.parentId, projectId },
+          where: { id: desiredParentId, projectId },
+          select: { id: true, path: true },
         });
         if (!parent) return reply.status(400).send({ error: "Parent location not found" });
-        newPath = buildPath(parent.path, segment);
-      } else {
-        newPath = segment;
+
+        // Evitar ciclos: no permitir mover un nodo dentro de su subárbol.
+        if (parent.path === oldPath || parent.path.startsWith(oldPath + "/")) {
+          return reply.status(400).send({ error: "La relación padre-hijo genera un ciclo" });
+        }
+        parentPath = parent.path;
       }
-      const oldPath = location.path;
+
+      const newPath = buildPath(parentPath, segment);
+
       await prisma.location.update({
         where: { id: locationId },
-        data: { name: body.name, path: newPath },
+        data: {
+          ...(body.name !== undefined && { name: body.name }),
+          ...(body.parentId !== undefined && { parentId: body.parentId }),
+          ...(oldPath !== newPath && { path: newPath }),
+        },
       });
+
       if (oldPath !== newPath) {
         const descendants = await prisma.location.findMany({
           where: { projectId, path: { startsWith: oldPath + "/" } },
+          select: { id: true, path: true },
         });
         for (const d of descendants) {
           const newChildPath = newPath + d.path.slice(oldPath.length);

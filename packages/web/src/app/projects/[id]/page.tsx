@@ -40,6 +40,7 @@ export default function ProjectDetailPage() {
 
   const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
   const [editLocName, setEditLocName] = useState("");
+  const [editLocParentId, setEditLocParentId] = useState<string>("");
   const [editLocTaskIds, setEditLocTaskIds] = useState<string[]>([]);
 
   const [replicatingFromLocationId, setReplicatingFromLocationId] = useState<string | null>(null);
@@ -78,6 +79,10 @@ export default function ProjectDetailPage() {
 
   // Árbol jerárquico: qué nodos están expandidos
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(new Set());
+
+  // Ubicaciones: vista lista o árbol + qué ramas están expandidas
+  const [locationsViewMode, setLocationsViewMode] = useState<"lista" | "arbol">("lista");
+  const [expandedLocationIds, setExpandedLocationIds] = useState<Set<string>>(new Set());
 
   const { data: project, isLoading, error } = useQuery({
     queryKey: ["project", id],
@@ -267,6 +272,7 @@ export default function ProjectDetailPage() {
     mutationFn: () =>
       locationsApi.update(id, editingLocationId!, {
         name: editLocName.trim(),
+        parentId: editLocParentId || null,
         taskDefinitionIds: editLocTaskIds,
       }),
     onSuccess: () => {
@@ -274,6 +280,7 @@ export default function ProjectDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["project", id] });
       setEditingLocationId(null);
       setEditLocName("");
+      setEditLocParentId("");
       setEditLocTaskIds([]);
     },
   });
@@ -310,6 +317,25 @@ export default function ProjectDetailPage() {
       setReplicateFromPrefix("");
     },
   });
+
+  // Expandir por defecto solo las ramas raíz al cargar/el cambiar de plan.
+  // IMPORTANTE: antes de cualquier return condicional para mantener el orden de hooks.
+  useEffect(() => {
+    const plan = plans?.plans?.[0];
+    if (!plan) return;
+    const roots = (plan.taskDefinitions ?? [])
+      .filter((t) => (t.parentTaskDefinitionId ?? null) === null)
+      .map((t) => t.id);
+    setExpandedTaskIds(new Set(roots));
+  }, [plans?.plans?.[0]?.id]);
+
+  // Expandir por defecto las ubicaciones raíz cuando cambian las ubicaciones.
+  // IMPORTANTE: antes de cualquier return condicional para mantener el orden de hooks.
+  useEffect(() => {
+    const locs = (locationsData?.locations ?? []) as { id: string; parentId: string | null }[];
+    const roots = (locs ?? []).filter((l) => (l.parentId ?? null) === null).map((l) => l.id);
+    setExpandedLocationIds(new Set(roots));
+  }, [locationsData?.locations?.length]);
 
   if (isLoading || !project) return <p style={{ padding: "2rem" }}>Cargando...</p>;
   if (error) return <p style={{ padding: "2rem", color: "#ef4444" }}>Error: {String(error)}</p>;
@@ -355,14 +381,6 @@ export default function ProjectDetailPage() {
   });
   const items = progress?.items ?? [];
   const projections = velocity?.projections ?? [];
-
-  // Expandir por defecto solo las ramas raíz al cargar/el cambiar de plan.
-  useEffect(() => {
-    if (!currentPlan) return;
-    const roots =
-      (currentPlan.taskDefinitions ?? []).filter((t) => (t.parentTaskDefinitionId ?? null) === null).map((t) => t.id);
-    setExpandedTaskIds(new Set(roots));
-  }, [currentPlan?.id]);
 
   const filteredItems =
     dimensionFilterId && dimensionFilterId.trim()
@@ -595,6 +613,7 @@ export default function ProjectDetailPage() {
                         const children = planTaskDefinitions.filter((c) => (c.parentTaskDefinitionId ?? null) === t.id);
                         const hasChildren = children.length > 0;
                         const isExpanded = expandedTaskIds.has(t.id);
+                        const treeToggleWidth = 26;
                         return (
                           <li key={t.id} style={{ marginBottom: 4, marginLeft: level * 14 }}>
                             <div
@@ -605,7 +624,7 @@ export default function ProjectDetailPage() {
                                 borderRadius: 6,
                               }}
                             >
-                              {hasChildren && (
+                              {hasChildren ? (
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -619,6 +638,7 @@ export default function ProjectDetailPage() {
                                     });
                                   }}
                                   style={{
+                                    width: treeToggleWidth,
                                     marginRight: "0.5rem",
                                     padding: "0.1rem 0.35rem",
                                     borderRadius: 4,
@@ -627,9 +647,12 @@ export default function ProjectDetailPage() {
                                     color: "var(--muted)",
                                     cursor: "pointer",
                                   }}
+                                  aria-label={isExpanded ? "Colapsar" : "Expandir"}
                                 >
-                                  {isExpanded ? "- " : "+ "}
+                                  {isExpanded ? "-" : "+"}
                                 </button>
+                              ) : (
+                                <span style={{ display: "inline-block", width: treeToggleWidth, marginRight: "0.5rem" }} />
                               )}
                               {t.name}{" "}
                               <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>({t.progressValueType})</span>
@@ -1051,7 +1074,7 @@ export default function ProjectDetailPage() {
         <>
           {/* Ubicaciones */}
           <section style={{ marginBottom: "2rem" }}>
-        <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Ubicaciones</h2>
+        <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Niveles</h2>
         {(levels.length === 0 || showAddLevel) ? (
           <div
             style={{
@@ -1198,216 +1221,567 @@ export default function ProjectDetailPage() {
             </ul>
           </div>
         )}
+
+        <h3 style={{ fontSize: "1rem", margin: "1rem 0 0.5rem 0" }}>
+          Ubicaciones (unidades funcionales, ambientes, etc)
+        </h3>
+
+        {/* Vista de ubicaciones: lista o árbol */}
+        {locations.length > 0 && (
+          <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => setLocationsViewMode("lista")}
+              style={{
+                padding: "0.45rem 0.85rem",
+                borderRadius: 8,
+                border: "1px solid var(--border)",
+                background: locationsViewMode === "lista" ? "var(--accent)" : "var(--surface)",
+                color: locationsViewMode === "lista" ? "white" : "var(--text)",
+                cursor: "pointer",
+              }}
+            >
+              Lista
+            </button>
+            <button
+              type="button"
+              onClick={() => setLocationsViewMode("arbol")}
+              style={{
+                padding: "0.45rem 0.85rem",
+                borderRadius: 8,
+                border: "1px solid var(--border)",
+                background: locationsViewMode === "arbol" ? "var(--accent)" : "var(--surface)",
+                color: locationsViewMode === "arbol" ? "white" : "var(--text)",
+                cursor: "pointer",
+              }}
+            >
+              Árbol
+            </button>
+          </div>
+        )}
+
         {locations.length > 0 && (
           <ul style={{ listStyle: "none", padding: 0, margin: "0 0 1rem 0" }}>
-            {locations.map((loc) => (
-              <li
-                key={loc.id}
-                style={{
-                  padding: "0.5rem",
-                  background: "var(--surface)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 6,
-                  marginBottom: 4,
-                }}
-              >
-                {editingLocationId === loc.id ? (
-                  <div style={{ padding: "0.25rem 0" }}>
-                    <input
-                      placeholder="Nombre"
-                      value={editLocName}
-                      onChange={(e) => setEditLocName(e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: "0.5rem",
-                        marginBottom: "0.5rem",
-                        background: "var(--bg)",
-                        border: "1px solid var(--border)",
-                        borderRadius: 6,
-                        color: "var(--text)",
-                      }}
-                    />
-                    {currentPlan?.taskDefinitions && currentPlan.taskDefinitions.length > 0 && (
-                      <div style={{ marginBottom: "0.5rem" }}>
-                        <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginBottom: "0.25rem" }}>Tareas asociadas</p>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                          {currentPlan.taskDefinitions.map((t) => (
-                            <label key={t.id} style={{ display: "flex", alignItems: "center", gap: "0.25rem", cursor: "pointer" }}>
-                              <input
-                                type="checkbox"
-                                checked={editLocTaskIds.includes(t.id)}
-                                onChange={(e) =>
-                                  setEditLocTaskIds((prev) =>
-                                    e.target.checked ? [...prev, t.id] : prev.filter((id) => id !== t.id)
-                                  )
-                                }
-                              />
-                              <span style={{ fontSize: "0.9rem" }}>{t.name}</span>
-                            </label>
-                          ))}
+            {locationsViewMode === "lista"
+              ? locations.map((loc) => (
+                  <li
+                    key={loc.id}
+                    style={{
+                      padding: "0.5rem",
+                      background: "var(--surface)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 6,
+                      marginBottom: 4,
+                    }}
+                  >
+                    {editingLocationId === loc.id ? (
+                      <div style={{ padding: "0.25rem 0" }}>
+                        <input
+                          placeholder="Nombre"
+                          value={editLocName}
+                          onChange={(e) => setEditLocName(e.target.value)}
+                          style={{
+                            width: "100%",
+                            padding: "0.5rem",
+                            marginBottom: "0.5rem",
+                            background: "var(--bg)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 6,
+                            color: "var(--text)",
+                          }}
+                        />
+                        <select
+                          value={editLocParentId}
+                          onChange={(e) => setEditLocParentId(e.target.value)}
+                          style={{
+                            width: "100%",
+                            padding: "0.5rem",
+                            marginBottom: "0.5rem",
+                            background: "var(--bg)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 6,
+                            color: "var(--text)",
+                          }}
+                        >
+                          <option value="">Sin padre (raíz)</option>
+                          {locations
+                            .filter((l) => l.id !== editingLocationId)
+                            .map((l) => (
+                              <option key={l.id} value={l.id}>
+                                {l.name}
+                              </option>
+                            ))}
+                        </select>
+                        {currentPlan?.taskDefinitions && currentPlan.taskDefinitions.length > 0 && (
+                          <div style={{ marginBottom: "0.5rem" }}>
+                            <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginBottom: "0.25rem" }}>Tareas asociadas</p>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                              {currentPlan.taskDefinitions.map((t) => (
+                                <label key={t.id} style={{ display: "flex", alignItems: "center", gap: "0.25rem", cursor: "pointer" }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={editLocTaskIds.includes(t.id)}
+                                    onChange={(e) =>
+                                      setEditLocTaskIds((prev) =>
+                                        e.target.checked ? [...prev, t.id] : prev.filter((id) => id !== t.id)
+                                      )
+                                    }
+                                  />
+                                  <span style={{ fontSize: "0.9rem" }}>{t.name}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <div style={{ display: "flex", gap: "0.5rem" }}>
+                          <button
+                            type="button"
+                            onClick={() => updateLocation.mutate()}
+                            disabled={!editLocName.trim() || updateLocation.isPending}
+                            style={{
+                              padding: "0.35rem 0.75rem",
+                              background: "var(--accent)",
+                              color: "white",
+                              border: "none",
+                              borderRadius: 6,
+                            }}
+                          >
+                            {updateLocation.isPending ? "Guardando…" : "Guardar"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingLocationId(null);
+                              setEditLocName("");
+                              setEditLocParentId("");
+                              setEditLocTaskIds([]);
+                            }}
+                            style={{
+                              padding: "0.35rem 0.75rem",
+                              background: "transparent",
+                              border: "1px solid var(--border)",
+                              borderRadius: 6,
+                              color: "var(--text)",
+                            }}
+                          >
+                            Cancelar
+                          </button>
                         </div>
                       </div>
+                    ) : replicatingFromLocationId === loc.id ? (
+                      <div style={{ padding: "0.25rem 0", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem" }}>
+                        <input
+                          type="number"
+                          min={1}
+                          max={500}
+                          value={replicateFromCount}
+                          onChange={(e) => setReplicateFromCount(Number(e.target.value) || 1)}
+                          style={{
+                            width: "4rem",
+                            padding: "0.35rem",
+                            background: "var(--bg)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 6,
+                            color: "var(--text)",
+                          }}
+                        />
+                        <span style={{ fontSize: "0.9rem" }}>copias</span>
+                        <input
+                          placeholder="Prefijo nombre (opcional)"
+                          value={replicateFromPrefix}
+                          onChange={(e) => setReplicateFromPrefix(e.target.value)}
+                          style={{
+                            width: "10rem",
+                            padding: "0.35rem",
+                            background: "var(--bg)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 6,
+                            color: "var(--text)",
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => replicateFromLocation.mutate()}
+                          disabled={replicateFromCount < 1 || replicateFromLocation.isPending}
+                          style={{
+                            padding: "0.35rem 0.75rem",
+                            background: "var(--accent)",
+                            color: "white",
+                            border: "none",
+                            borderRadius: 6,
+                          }}
+                        >
+                          {replicateFromLocation.isPending ? "Creando…" : "Crear copias"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReplicatingFromLocationId(null);
+                            setReplicateFromPrefix("");
+                          }}
+                          style={{
+                            padding: "0.35rem 0.75rem",
+                            background: "transparent",
+                            border: "1px solid var(--border)",
+                            borderRadius: 6,
+                            color: "var(--text)",
+                          }}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        {loc.name} <code style={{ fontSize: "0.85rem", color: "var(--muted)" }}>{loc.path}</code>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingLocationId(loc.id);
+                            setEditLocName(loc.name);
+                        setEditLocParentId(loc.parentId ?? "");
+                            setEditLocTaskIds(loc.taskDefinitionIds ?? []);
+                          }}
+                          style={{
+                            marginLeft: "0.5rem",
+                            padding: "0.2rem 0.5rem",
+                            fontSize: "0.85rem",
+                            background: "transparent",
+                            border: "1px solid var(--border)",
+                            borderRadius: 4,
+                            color: "var(--text)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setReplicatingFromLocationId(loc.id)}
+                          style={{
+                            marginLeft: "0.25rem",
+                            padding: "0.2rem 0.5rem",
+                            fontSize: "0.85rem",
+                            background: "transparent",
+                            border: "1px solid var(--border)",
+                            borderRadius: 4,
+                            color: "var(--text)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Replicar N veces
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (typeof window !== "undefined" && window.confirm("¿Borrar esta ubicación y las que cuelgan de ella?")) {
+                              deleteLocation.mutate(loc.id);
+                            }
+                          }}
+                          disabled={deleteLocation.isPending}
+                          style={{
+                            marginLeft: "0.25rem",
+                            padding: "0.2rem 0.5rem",
+                            fontSize: "0.85rem",
+                            background: "transparent",
+                            border: "1px solid var(--border)",
+                            borderRadius: 4,
+                            color: "#dc2626",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Borrar
+                        </button>
+                      </>
                     )}
-                    <div style={{ display: "flex", gap: "0.5rem" }}>
-                      <button
-                        type="button"
-                        onClick={() => updateLocation.mutate()}
-                        disabled={!editLocName.trim() || updateLocation.isPending}
+                  </li>
+                ))
+              : (() => {
+                  const byParent = new Map<string | null, typeof locations>();
+                  for (const l of locations) {
+                    const key = (l.parentId ?? null) as string | null;
+                    const arr = byParent.get(key) ?? [];
+                    arr.push(l);
+                    byParent.set(key, arr);
+                  }
+
+                  const renderNode = (loc: (typeof locations)[number], level: number): JSX.Element => {
+                    const children = byParent.get(loc.id) ?? [];
+                    const hasChildren = children.length > 0;
+                    const isExpanded = expandedLocationIds.has(loc.id);
+                    const treeToggleWidth = 26;
+                    return (
+                      <li
+                        key={loc.id}
                         style={{
-                          padding: "0.35rem 0.75rem",
-                          background: "var(--accent)",
-                          color: "white",
-                          border: "none",
-                          borderRadius: 6,
-                        }}
-                      >
-                        {updateLocation.isPending ? "Guardando…" : "Guardar"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingLocationId(null);
-                          setEditLocName("");
-                          setEditLocTaskIds([]);
-                        }}
-                        style={{
-                          padding: "0.35rem 0.75rem",
-                          background: "transparent",
+                          padding: "0.5rem",
+                          background: "var(--surface)",
                           border: "1px solid var(--border)",
                           borderRadius: 6,
-                          color: "var(--text)",
+                          marginBottom: 4,
+                          marginLeft: level * 14,
                         }}
                       >
-                        Cancelar
-                      </button>
-                    </div>
-                  </div>
-                ) : replicatingFromLocationId === loc.id ? (
-                  <div style={{ padding: "0.25rem 0", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem" }}>
-                    <input
-                      type="number"
-                      min={1}
-                      max={500}
-                      value={replicateFromCount}
-                      onChange={(e) => setReplicateFromCount(Number(e.target.value) || 1)}
-                      style={{
-                        width: "4rem",
-                        padding: "0.35rem",
-                        background: "var(--bg)",
-                        border: "1px solid var(--border)",
-                        borderRadius: 6,
-                        color: "var(--text)",
-                      }}
-                    />
-                    <span style={{ fontSize: "0.9rem" }}>copias</span>
-                    <input
-                      placeholder="Prefijo nombre (opcional)"
-                      value={replicateFromPrefix}
-                      onChange={(e) => setReplicateFromPrefix(e.target.value)}
-                      style={{
-                        width: "10rem",
-                        padding: "0.35rem",
-                        background: "var(--bg)",
-                        border: "1px solid var(--border)",
-                        borderRadius: 6,
-                        color: "var(--text)",
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => replicateFromLocation.mutate()}
-                      disabled={replicateFromCount < 1 || replicateFromLocation.isPending}
-                      style={{
-                        padding: "0.35rem 0.75rem",
-                        background: "var(--accent)",
-                        color: "white",
-                        border: "none",
-                        borderRadius: 6,
-                      }}
-                    >
-                      {replicateFromLocation.isPending ? "Creando…" : "Crear copias"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setReplicatingFromLocationId(null);
-                        setReplicateFromPrefix("");
-                      }}
-                      style={{
-                        padding: "0.35rem 0.75rem",
-                        background: "transparent",
-                        border: "1px solid var(--border)",
-                        borderRadius: 6,
-                        color: "var(--text)",
-                      }}
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    {loc.name} <code style={{ fontSize: "0.85rem", color: "var(--muted)" }}>{loc.path}</code>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingLocationId(loc.id);
-                        setEditLocName(loc.name);
-                        setEditLocTaskIds(loc.taskDefinitionIds ?? []);
-                      }}
-                      style={{
-                        marginLeft: "0.5rem",
-                        padding: "0.2rem 0.5rem",
-                        fontSize: "0.85rem",
-                        background: "transparent",
-                        border: "1px solid var(--border)",
-                        borderRadius: 4,
-                        color: "var(--text)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setReplicatingFromLocationId(loc.id)}
-                      style={{
-                        marginLeft: "0.25rem",
-                        padding: "0.2rem 0.5rem",
-                        fontSize: "0.85rem",
-                        background: "transparent",
-                        border: "1px solid var(--border)",
-                        borderRadius: 4,
-                        color: "var(--text)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Replicar N veces
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (typeof window !== "undefined" && window.confirm("¿Borrar esta ubicación y las que cuelgan de ella?")) {
-                          deleteLocation.mutate(loc.id);
-                        }
-                      }}
-                      disabled={deleteLocation.isPending}
-                      style={{
-                        marginLeft: "0.25rem",
-                        padding: "0.2rem 0.5rem",
-                        fontSize: "0.85rem",
-                        background: "transparent",
-                        border: "1px solid var(--border)",
-                        borderRadius: 4,
-                        color: "#dc2626",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Borrar
-                    </button>
-                  </>
-                )}
-              </li>
-            ))}
+                        {editingLocationId === loc.id ? (
+                          <div style={{ padding: "0.25rem 0" }}>
+                            <input
+                              placeholder="Nombre"
+                              value={editLocName}
+                              onChange={(e) => setEditLocName(e.target.value)}
+                              style={{
+                                width: "100%",
+                                padding: "0.5rem",
+                                marginBottom: "0.5rem",
+                                background: "var(--bg)",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                                color: "var(--text)",
+                              }}
+                            />
+                            <select
+                              value={editLocParentId}
+                              onChange={(e) => setEditLocParentId(e.target.value)}
+                              style={{
+                                width: "100%",
+                                padding: "0.5rem",
+                                marginBottom: "0.5rem",
+                                background: "var(--bg)",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                                color: "var(--text)",
+                              }}
+                            >
+                              <option value="">Sin padre (raíz)</option>
+                              {locations
+                                .filter((l) => l.id !== editingLocationId)
+                                .map((l) => (
+                                  <option key={l.id} value={l.id}>
+                                    {l.name}
+                                  </option>
+                                ))}
+                            </select>
+                            {currentPlan?.taskDefinitions && currentPlan.taskDefinitions.length > 0 && (
+                              <div style={{ marginBottom: "0.5rem" }}>
+                                <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginBottom: "0.25rem" }}>Tareas asociadas</p>
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                                  {currentPlan.taskDefinitions.map((t) => (
+                                    <label key={t.id} style={{ display: "flex", alignItems: "center", gap: "0.25rem", cursor: "pointer" }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={editLocTaskIds.includes(t.id)}
+                                        onChange={(e) =>
+                                          setEditLocTaskIds((prev) =>
+                                            e.target.checked ? [...prev, t.id] : prev.filter((id) => id !== t.id)
+                                          )
+                                        }
+                                      />
+                                      <span style={{ fontSize: "0.9rem" }}>{t.name}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            <div style={{ display: "flex", gap: "0.5rem" }}>
+                              <button
+                                type="button"
+                                onClick={() => updateLocation.mutate()}
+                                disabled={!editLocName.trim() || updateLocation.isPending}
+                                style={{
+                                  padding: "0.35rem 0.75rem",
+                                  background: "var(--accent)",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: 6,
+                                }}
+                              >
+                                {updateLocation.isPending ? "Guardando…" : "Guardar"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingLocationId(null);
+                                  setEditLocName("");
+                                  setEditLocParentId("");
+                                  setEditLocTaskIds([]);
+                                }}
+                                style={{
+                                  padding: "0.35rem 0.75rem",
+                                  background: "transparent",
+                                  border: "1px solid var(--border)",
+                                  borderRadius: 6,
+                                  color: "var(--text)",
+                                }}
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        ) : replicatingFromLocationId === loc.id ? (
+                          <div style={{ padding: "0.25rem 0", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem" }}>
+                            <input
+                              type="number"
+                              min={1}
+                              max={500}
+                              value={replicateFromCount}
+                              onChange={(e) => setReplicateFromCount(Number(e.target.value) || 1)}
+                              style={{
+                                width: "4rem",
+                                padding: "0.35rem",
+                                background: "var(--bg)",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                                color: "var(--text)",
+                              }}
+                            />
+                            <span style={{ fontSize: "0.9rem" }}>copias</span>
+                            <input
+                              placeholder="Prefijo nombre (opcional)"
+                              value={replicateFromPrefix}
+                              onChange={(e) => setReplicateFromPrefix(e.target.value)}
+                              style={{
+                                width: "10rem",
+                                padding: "0.35rem",
+                                background: "var(--bg)",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                                color: "var(--text)",
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => replicateFromLocation.mutate()}
+                              disabled={replicateFromCount < 1 || replicateFromLocation.isPending}
+                              style={{
+                                padding: "0.35rem 0.75rem",
+                                background: "var(--accent)",
+                                color: "white",
+                                border: "none",
+                                borderRadius: 6,
+                              }}
+                            >
+                              {replicateFromLocation.isPending ? "Creando…" : "Crear copias"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReplicatingFromLocationId(null);
+                                setReplicateFromPrefix("");
+                              }}
+                              style={{
+                                padding: "0.35rem 0.75rem",
+                                background: "transparent",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                                color: "var(--text)",
+                              }}
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            {hasChildren ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setExpandedLocationIds((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(loc.id)) next.delete(loc.id);
+                                    else next.add(loc.id);
+                                    return next;
+                                  });
+                                }}
+                                style={{
+                                  width: treeToggleWidth,
+                                  marginRight: "0.5rem",
+                                  padding: "0.1rem 0.35rem",
+                                  borderRadius: 4,
+                                  border: "1px solid var(--border)",
+                                  background: "transparent",
+                                  color: "var(--muted)",
+                                  cursor: "pointer",
+                                }}
+                                aria-label={isExpanded ? "Colapsar" : "Expandir"}
+                              >
+                                {isExpanded ? "-" : "+"}
+                              </button>
+                            ) : (
+                              <span style={{ display: "inline-block", width: treeToggleWidth, marginRight: "0.5rem" }} />
+                            )}
+                            {loc.name} <code style={{ fontSize: "0.85rem", color: "var(--muted)" }}>{loc.path}</code>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingLocationId(loc.id);
+                                setEditLocName(loc.name);
+                                setEditLocParentId(loc.parentId ?? "");
+                                setEditLocTaskIds(loc.taskDefinitionIds ?? []);
+                              }}
+                              style={{
+                                marginLeft: "0.5rem",
+                                padding: "0.2rem 0.5rem",
+                                fontSize: "0.85rem",
+                                background: "transparent",
+                                border: "1px solid var(--border)",
+                                borderRadius: 4,
+                                color: "var(--text)",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setReplicatingFromLocationId(loc.id)}
+                              style={{
+                                marginLeft: "0.25rem",
+                                padding: "0.2rem 0.5rem",
+                                fontSize: "0.85rem",
+                                background: "transparent",
+                                border: "1px solid var(--border)",
+                                borderRadius: 4,
+                                color: "var(--text)",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Replicar N veces
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (typeof window !== "undefined" && window.confirm("¿Borrar esta ubicación y las que cuelgan de ella?")) {
+                                  deleteLocation.mutate(loc.id);
+                                }
+                              }}
+                              disabled={deleteLocation.isPending}
+                              style={{
+                                marginLeft: "0.25rem",
+                                padding: "0.2rem 0.5rem",
+                                fontSize: "0.85rem",
+                                background: "transparent",
+                                border: "1px solid var(--border)",
+                                borderRadius: 4,
+                                color: "#dc2626",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Borrar
+                            </button>
+                          </>
+                        )}
+                        {hasChildren && isExpanded ? (
+                          <ul style={{ listStyle: "none", padding: 0, marginTop: 6 }}>
+                            {children.map((c) => renderNode(c, level + 1))}
+                          </ul>
+                        ) : null}
+                      </li>
+                    );
+                  };
+
+                  const roots = byParent.get(null) ?? [];
+                  return roots.map((r) => renderNode(r, 0));
+                })()}
           </ul>
         )}
         {locations.length === 0 && levels.length > 0 && (
