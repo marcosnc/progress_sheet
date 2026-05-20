@@ -122,34 +122,61 @@ Migraciones: el contenedor `backend` ejecuta `prisma migrate deploy` al arrancar
 Seed opcional (una vez, con el stack levantado):
 
 ```bash
-docker compose exec backend sh -c "cd /app && pnpm --filter backend run db:seed"
+docker compose exec backend node /app/packages/backend/dist/seed.js
 ```
 
-Si la imagen es anterior a este cambio: `docker compose build backend && docker compose up -d backend`.
+Build local sin saturar CPU (una imagen tras otra):
 
-### Coolify (un solo recurso Compose)
+```bash
+COMPOSE_PARALLEL_LIMIT=1 docker compose build
+docker compose up -d
+```
 
-1. Sube el repo a Git y conéctalo en Coolify.
-2. **+ New Resource** → **Docker Compose** → repositorio y rama.
-3. Coolify detectará `docker-compose.yml` en la raíz.
-4. Define las variables del `.env.compose.example` en el panel de entorno.
-5. Asigna dominios:
-   - **web** → `https://app.tudominio.com` (aplicación principal)
-   - **backend** → `https://api.tudominio.com` (API; health check en `/health`)
-6. Asegura que `NEXT_PUBLIC_API_URL` sea `https://api.tudominio.com/api` **antes** del primer deploy (o redeploy/rebuild de `web` tras cambiarla).
-7. Deploy. El volumen `postgres_data` persiste la base de datos.
+### Coolify (recomendado: sin compilar en el VPS)
 
-#### Deploy lento o colgado en Coolify
+Compilar Next.js + pnpm en un VPS chico puede llevar el CPU al 200% y colgar Coolify. **La opción recomendada es construir las imágenes en GitHub Actions y que Coolify solo las descargue.**
 
-El primer build descarga dependencias (`pnpm install`) para **backend** y **web** por separado. En VPS chicos puede tardar 15–30 min o parecer colgado en `Progress: resolved 974...`.
+#### 1. GitHub Actions (build en la nube)
 
-**Qué hacer:**
+1. Hacé push a `main` (o `master`). El workflow `.github/workflows/docker-publish.yml` publica en GHCR:
+   - `ghcr.io/TU_USUARIO/progress-sheet-backend:latest`
+   - `ghcr.io/TU_USUARIO/progress-sheet-web:latest`
+2. En el repo de GitHub → **Settings → Variables** → agregá:
+   - `NEXT_PUBLIC_API_URL` = `https://api.tudominio.com/api` (se usa al construir la web).
+3. Si el repo es **privado**: en GitHub → **Packages** → cada imagen → **Package settings** → permitir acceso al repo, y en Coolify configurá credenciales de **GHCR** (usuario + PAT con `read:packages`).
 
-1. **Cancelá** el deploy colgado en Coolify y volvé a desplegar tras pushear los últimos Dockerfiles (usan `--filter` y no instalan Expo/mobile).
-2. En Coolify → **Settings** del servidor: activá **Docker BuildKit** y subí el **timeout de deployment** (p. ej. 45–60 min para el primer build).
-3. Verificá RAM libre (recomendado **≥ 2 GB** durante el build; Next.js necesita memoria).
-4. El **segundo deploy** debería ser mucho más rápido gracias a la caché de pnpm (`/pnpm/store` en los Dockerfiles).
-5. Si sigue fallando: desplegá una vez solo (temporalmente comentá `web` en compose, deploy backend+postgres, luego web) para no compilar ambas imágenes a la vez.
+#### 2. Coolify (solo pull, casi sin CPU)
+
+1. **Detené** deploys en curso y esperá a que el servidor baje el CPU (o reiniciá Coolify si la UI quedó colgada).
+2. **+ New Resource** → **Docker Compose**.
+3. En **Compose file** poné: `docker-compose.coolify.yml` (no el `docker-compose.yml` por defecto).
+4. Variables (ver `.env.coolify.example`):
+
+| Variable | Ejemplo |
+|----------|---------|
+| `POSTGRES_PASSWORD` | (obligatoria) |
+| `JWT_SECRET` | (obligatorio) |
+| `BACKEND_IMAGE` | `ghcr.io/tu-usuario/progress-sheet-backend:latest` |
+| `WEB_IMAGE` | `ghcr.io/tu-usuario/progress-sheet-web:latest` |
+
+5. Dominios: **web** → app, **backend** → api.
+6. **Deploy** — solo descarga imágenes y levanta Postgres (~segundos de CPU, no minutos de build).
+
+Seed en producción:
+
+```bash
+docker exec -it <contenedor-backend> node /app/packages/backend/dist/seed.js
+```
+
+#### Alternativa: compilar en el servidor (no recomendado en VPS pequeños)
+
+Usá `docker-compose.yml`, activá **BuildKit**, y antes del deploy:
+
+```bash
+COMPOSE_PARALLEL_LIMIT=1
+```
+
+En Coolify → Environment, agregá `COMPOSE_PARALLEL_LIMIT=1` si tu versión lo respeta al hacer compose. Aun así, el primer build puede tardar mucho y saturar el servidor.
 
 ### Mobile en producción
 

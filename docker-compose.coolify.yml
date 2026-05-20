@@ -1,12 +1,14 @@
-# Local / build on server: one Dockerfile, shared layers between backend and web.
-# Build serially to avoid 200% CPU: COMPOSE_PARALLEL_LIMIT=1 docker compose build
+# Coolify (recomendado): solo descarga imágenes — NO compila en el VPS.
+# Requiere GitHub Actions (.github/workflows/docker-publish.yml) y registry configurado.
+#
+# En Coolify → Docker Compose → "Compose file": docker-compose.coolify.yml
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-progress}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-progress_sheet}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -22,14 +24,11 @@ services:
       start_period: 10s
 
   backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: backend
+    image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE (e.g. ghcr.io/user/progress-sheet-backend:latest)}
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-progress}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-progress_sheet}
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
       HOST: 0.0.0.0
       PORT: 3001
     depends_on:
@@ -47,16 +46,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 60s
-    ports:
-      - "${API_PORT:-3001}:3001"
+    expose:
+      - "3001"
 
   web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: web
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL in .env (e.g. https://api.example.com/api)}
+    image: ${WEB_IMAGE:?Set WEB_IMAGE (e.g. ghcr.io/user/progress-sheet-web:latest)}
     restart: unless-stopped
     environment:
       PORT: 3000
@@ -76,8 +70,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-    ports:
-      - "${WEB_PORT:-3000}:3000"
+    expose:
+      - "3000"
 
 volumes:
   postgres_data:

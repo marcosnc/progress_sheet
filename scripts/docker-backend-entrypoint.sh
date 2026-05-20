@@ -1,11 +1,10 @@
 #!/bin/sh
 set -e
 
-cd /app
+cd /app/packages/backend
 
 echo "Running database migrations..."
-pnpm --filter backend exec prisma migrate deploy
+/app/node_modules/.bin/prisma migrate deploy
 
 echo "Starting API server..."
-cd packages/backend
 exec node dist/index.js
