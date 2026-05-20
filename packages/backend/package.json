@@ -9,10 +9,11 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "db:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "node dist/seed.js",
+    "db:seed:dev": "tsx src/seed.ts"
   },
   "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx src/seed.ts"
   },
   "dependencies": {
     "@progress-sheet/shared": "workspace:*",

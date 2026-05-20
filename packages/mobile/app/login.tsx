@@ -3,7 +3,7 @@ import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 
-const API = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
+const API = (process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001/api").replace(/\/api\/?$/, "");
 
 async function login(email: string, password: string) {
   const res = await fetch(`${API}/auth/login`, {

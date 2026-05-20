@@ -1,5 +1,11 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
 
+/** Auth routes are at /auth/*, not under /api */
+function apiOrigin(): string {
+  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
+  return base.replace(/\/api\/?$/, "") || base;
+}
+
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("token");
@@ -31,7 +37,7 @@ export async function api<T>(
 }
 
 export async function login(email: string, password: string) {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"}/auth/login`, {
+  const res = await fetch(`${apiOrigin()}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
