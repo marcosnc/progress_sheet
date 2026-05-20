@@ -33,6 +33,9 @@ FROM node:20-alpine AS backend
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Prisma CLI for migrate deploy (pnpm .bin symlinks are unreliable in copied node_modules)
+RUN npm install -g prisma@6
+
 COPY --from=backend-builder /app/node_modules ./node_modules
 COPY --from=backend-builder /app/packages/backend/node_modules ./packages/backend/node_modules
 COPY --from=backend-builder /app/packages/shared/node_modules ./packages/shared/node_modules
