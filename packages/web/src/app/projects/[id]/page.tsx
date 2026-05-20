@@ -1703,7 +1703,7 @@ export default function ProjectDetailPage() {
                     byParent.set(key, arr);
                   }
 
-                  const renderNode = (loc: (typeof locations)[number], level: number): JSX.Element => {
+                  const renderNode = (loc: (typeof locations)[number], level: number) => {
                     const children = byParent.get(loc.id) ?? [];
                     const hasChildren = children.length > 0;
                     const isExpanded = expandedLocationIds.has(loc.id);
