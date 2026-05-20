@@ -16,3 +16,7 @@ coverage
 agent-transcripts
 terminals
 tasks.txt
+packages/mobile/app
+packages/mobile/assets
+**/.git
+README.md

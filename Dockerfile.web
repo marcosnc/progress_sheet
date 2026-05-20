@@ -1,18 +1,23 @@
+# syntax=docker/dockerfile:1.4
 FROM node:20-alpine AS base
 RUN corepack enable && corepack prepare pnpm@9.14.2 --activate
 WORKDIR /app
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
 
 FROM base AS deps
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY .npmrc pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages/backend/package.json packages/backend/
 COPY packages/shared/package.json packages/shared/
 COPY packages/web/package.json packages/web/
 COPY packages/mobile/package.json packages/mobile/
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm install --frozen-lockfile --filter web...
 
 FROM deps AS builder
 ARG NEXT_PUBLIC_API_URL=http://localhost:3001/api
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 
 COPY packages/shared packages/shared
 COPY packages/web packages/web

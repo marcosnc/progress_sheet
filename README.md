@@ -139,6 +139,18 @@ Si la imagen es anterior a este cambio: `docker compose build backend && docker 
 6. Asegura que `NEXT_PUBLIC_API_URL` sea `https://api.tudominio.com/api` **antes** del primer deploy (o redeploy/rebuild de `web` tras cambiarla).
 7. Deploy. El volumen `postgres_data` persiste la base de datos.
 
+#### Deploy lento o colgado en Coolify
+
+El primer build descarga dependencias (`pnpm install`) para **backend** y **web** por separado. En VPS chicos puede tardar 15–30 min o parecer colgado en `Progress: resolved 974...`.
+
+**Qué hacer:**
+
+1. **Cancelá** el deploy colgado en Coolify y volvé a desplegar tras pushear los últimos Dockerfiles (usan `--filter` y no instalan Expo/mobile).
+2. En Coolify → **Settings** del servidor: activá **Docker BuildKit** y subí el **timeout de deployment** (p. ej. 45–60 min para el primer build).
+3. Verificá RAM libre (recomendado **≥ 2 GB** durante el build; Next.js necesita memoria).
+4. El **segundo deploy** debería ser mucho más rápido gracias a la caché de pnpm (`/pnpm/store` en los Dockerfiles).
+5. Si sigue fallando: desplegá una vez solo (temporalmente comentá `web` en compose, deploy backend+postgres, luego web) para no compilar ambas imágenes a la vez.
+
 ### Mobile en producción
 
 En builds de Expo, define `EXPO_PUBLIC_API_URL` apuntando a la URL pública del API (con `/api` donde corresponda en cada pantalla; ver `packages/mobile`).
