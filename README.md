@@ -103,7 +103,7 @@ Copia `.env.compose.example` a `.env` (o configúralas en Coolify → Environmen
 | `POSTGRES_DB` | Nombre de la base (default: `progress_sheet`) |
 | `WEB_PORT` | Puerto en el host para la web en pruebas locales (default: `3000`) |
 
-`NEXT_PUBLIC_API_URL` se usa en el **build** de la imagen web: si cambias el dominio del API, hay que **reconstruir** el servicio `web`.
+`NEXT_PUBLIC_API_URL` en Coolify se aplica al **arrancar** el contenedor `web` (archivo `/runtime-env.js`). En GitHub Actions también se usa en el build como respaldo y para invalidar la caché de Docker.
 
 ### Probar en local
 
@@ -158,6 +158,7 @@ Compilar Next.js + pnpm en un VPS chico puede llevar el CPU al 200% y colgar Coo
 | `JWT_SECRET` | (obligatorio) |
 | `BACKEND_IMAGE` | `ghcr.io/tu-usuario/progress-sheet-backend:latest` |
 | `WEB_IMAGE` | `ghcr.io/tu-usuario/progress-sheet-web:latest` |
+| `NEXT_PUBLIC_API_URL` | `https://api.tudominio.com/api` (obligatoria en Coolify) |
 
 5. Dominios: **web** → app, **backend** → api.
 6. **Deploy** — solo descarga imágenes y levanta Postgres (~segundos de CPU, no minutos de build).

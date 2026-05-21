@@ -1,10 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
-
-/** Auth routes are at /auth/*, not under /api */
-function apiOrigin(): string {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
-  return base.replace(/\/api\/?$/, "") || base;
-}
+import { getApiBaseUrl, getApiOrigin } from "./runtime-config";
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -16,7 +10,7 @@ export async function api<T>(
   options: RequestInit & { params?: Record<string, string> } = {}
 ): Promise<T> {
   const { params, ...init } = options;
-  let url = `${API_BASE}${path}`;
+  let url = `${getApiBaseUrl()}${path}`;
   if (params && Object.keys(params).length > 0) {
     url += "?" + new URLSearchParams(params).toString();
   }
@@ -37,7 +31,7 @@ export async function api<T>(
 }
 
 export async function login(email: string, password: string) {
-  const res = await fetch(`${apiOrigin()}/auth/login`, {
+  const res = await fetch(`${getApiOrigin()}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),

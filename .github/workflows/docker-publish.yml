@@ -63,6 +63,7 @@ jobs:
             ${{ steps.meta.outputs.web_image }}:${{ github.sha }}
           build-args: |
             NEXT_PUBLIC_API_URL=${{ env.NEXT_PUBLIC_API_URL }}
+            CACHE_BUST=${{ env.NEXT_PUBLIC_API_URL }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

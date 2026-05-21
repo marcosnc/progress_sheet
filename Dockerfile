@@ -57,10 +57,13 @@ ENTRYPOINT ["/entrypoint.sh"]
 # --- web ---
 FROM shared-builder AS web-builder
 ARG NEXT_PUBLIC_API_URL=http://localhost:3001/api
+# Bust GHA/buildx cache when the public API URL changes (ARG alone may not invalidate RUN).
+ARG CACHE_BUST=1
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
     NODE_OPTIONS=--max-old-space-size=2048
 COPY packages/web packages/web
-RUN pnpm --filter web build
+RUN echo "NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} CACHE_BUST=${CACHE_BUST}" \
+ && pnpm --filter web build
 
 FROM node:20-alpine AS web
 WORKDIR /app
@@ -75,9 +78,14 @@ COPY --from=web-builder /app/packages/web/public ./packages/web/public
 COPY --from=web-builder --chown=nextjs:nodejs /app/packages/web/.next/standalone ./
 COPY --from=web-builder --chown=nextjs:nodejs /app/packages/web/.next/static ./packages/web/.next/static
 
+COPY scripts/docker-web-entrypoint.sh /entrypoint.sh
+RUN chown -R nextjs:nodejs /app/packages/web/public \
+ && chmod +x /entrypoint.sh
+
 USER nextjs
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3000').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["node", "packages/web/server.js"]
