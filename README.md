@@ -103,7 +103,9 @@ Copia `.env.compose.example` a `.env` (o configúralas en Coolify → Environmen
 | `POSTGRES_DB` | Nombre de la base (default: `progress_sheet`) |
 | `WEB_PORT` | Puerto en el host para la web en pruebas locales (default: `3000`) |
 
-`NEXT_PUBLIC_API_URL` en Coolify se lee en **runtime** en el servidor Next (se inyecta en el HTML de cada página). En GitHub Actions también se usa en el build como respaldo y para invalidar la caché de Docker.
+En Coolify, `NEXT_PUBLIC_API_URL` se mapea a **`API_BASE_URL`** en el contenedor `web` (variable solo de servidor, leída en cada request). GitHub Actions sigue usando `NEXT_PUBLIC_API_URL` en el build de la imagen.
+
+Tras deploy, comprobá: `curl https://tu-app/api/runtime-config` debe devolver `window.__PROGRESS_SHEET_CONFIG__=...` con tu dominio de API.
 
 ### Probar en local
 

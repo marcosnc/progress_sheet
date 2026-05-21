@@ -51,9 +51,11 @@ services:
 
   web:
     image: ${WEB_IMAGE:?Set WEB_IMAGE (e.g. ghcr.io/user/progress-sheet-web:latest)}
+    pull_policy: always
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL (e.g. https://api.example.com/api)}
+      # API_BASE_URL: solo servidor, leída en runtime (no se embebe en el build de Next)
+      API_BASE_URL: ${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL (e.g. https://api.example.com/api)}
       PORT: 3000
       HOSTNAME: 0.0.0.0
     depends_on:

@@ -8,9 +8,12 @@ declare global {
 
 const DEFAULT_API_BASE = "http://localhost:3001/api";
 
-/** Server-only: reads env at request time (Coolify / Docker runtime). */
+/**
+ * Server-only, runtime. Usa API_BASE_URL (sin prefijo NEXT_PUBLIC_) para que Next
+ * no lo reemplace en el build. NEXT_PUBLIC_* queda solo como respaldo en cliente.
+ */
 export function serverApiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_API_BASE;
+  return process.env.API_BASE_URL ?? DEFAULT_API_BASE;
 }
 
 /** API base URL with /api suffix (e.g. https://api.example.com/api). */

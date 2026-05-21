@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import "./globals.css";
 import { Providers } from "./providers";
 import { serverApiBaseUrl } from "@/lib/runtime-config";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Progress Sheet",
@@ -13,18 +16,18 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const runtimeConfig = JSON.stringify({ apiUrl: serverApiBaseUrl() });
+  const configScript = `window.__PROGRESS_SHEET_CONFIG__=${JSON.stringify({
+    apiUrl: serverApiBaseUrl(),
+  })};`;
 
   return (
     <html lang="es">
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `window.__PROGRESS_SHEET_CONFIG__=${runtimeConfig};`,
-          }}
-        />
-      </head>
       <body>
+        <Script
+          id="progress-sheet-config"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: configScript }}
+        />
         <Providers>{children}</Providers>
       </body>
     </html>
