@@ -78,14 +78,9 @@ COPY --from=web-builder /app/packages/web/public ./packages/web/public
 COPY --from=web-builder --chown=nextjs:nodejs /app/packages/web/.next/standalone ./
 COPY --from=web-builder --chown=nextjs:nodejs /app/packages/web/.next/static ./packages/web/.next/static
 
-COPY scripts/docker-web-entrypoint.sh /entrypoint.sh
-RUN chown -R nextjs:nodejs /app/packages/web/public \
- && chmod +x /entrypoint.sh
-
 USER nextjs
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3000').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-ENTRYPOINT ["/entrypoint.sh"]
 CMD ["node", "packages/web/server.js"]

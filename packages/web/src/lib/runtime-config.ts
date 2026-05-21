@@ -6,13 +6,20 @@ declare global {
   }
 }
 
+const DEFAULT_API_BASE = "http://localhost:3001/api";
+
+/** Server-only: reads env at request time (Coolify / Docker runtime). */
+export function serverApiBaseUrl(): string {
+  return process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_API_BASE;
+}
+
 /** API base URL with /api suffix (e.g. https://api.example.com/api). */
 export function getApiBaseUrl(): string {
   if (typeof window !== "undefined") {
     const runtime = window.__PROGRESS_SHEET_CONFIG__?.apiUrl;
     if (runtime) return runtime;
   }
-  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
+  return process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_API_BASE;
 }
 
 /** Backend origin without /api (auth routes live at /auth/*). */

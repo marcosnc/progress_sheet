@@ -103,7 +103,7 @@ Copia `.env.compose.example` a `.env` (o configúralas en Coolify → Environmen
 | `POSTGRES_DB` | Nombre de la base (default: `progress_sheet`) |
 | `WEB_PORT` | Puerto en el host para la web en pruebas locales (default: `3000`) |
 
-`NEXT_PUBLIC_API_URL` en Coolify se aplica al **arrancar** el contenedor `web` (archivo `/runtime-env.js`). En GitHub Actions también se usa en el build como respaldo y para invalidar la caché de Docker.
+`NEXT_PUBLIC_API_URL` en Coolify se lee en **runtime** en el servidor Next (se inyecta en el HTML de cada página). En GitHub Actions también se usa en el build como respaldo y para invalidar la caché de Docker.
 
 ### Probar en local
 
