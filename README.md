@@ -98,24 +98,24 @@ Copia `.env.compose.example` a `.env` (o configúralas en Coolify → Environmen
 |----------|-------------|
 | `POSTGRES_PASSWORD` | Contraseña de PostgreSQL (obligatoria) |
 | `JWT_SECRET` | Secreto para tokens JWT (obligatorio) |
-| `API_BASE_URL` | Base del API; con un solo dominio usá `/api` (default en Coolify) |
+| `API_BASE_URL` | URL **completa** del API con sufijo `/api`, p. ej. `http://localhost:3001/api` o `https://app.tudominio.com/api` |
 | `POSTGRES_USER` | Usuario Postgres (default: `progress`) |
 | `POSTGRES_DB` | Nombre de la base (default: `progress_sheet`) |
 | `WEB_PORT` | Puerto en el host para la web en pruebas locales (default: `3000`) |
 
-Tras deploy (mismo dominio): `curl https://tu-app/runtime-config` debe devolver `window.__PROGRESS_SHEET_CONFIG__={"apiUrl":"/api"};`.
+La web inyecta `API_BASE_URL` en el HTML en runtime (`window.__PROGRESS_SHEET_CONFIG__`). Comprobación: `curl http://localhost:3000/runtime-config`.
 
 ### Probar en local
 
 ```bash
 cp .env.compose.example .env
-# Editar .env: POSTGRES_PASSWORD, JWT_SECRET (API_BASE_URL=/api por defecto)
+# Editar .env: POSTGRES_PASSWORD, JWT_SECRET (API_BASE_URL=http://localhost:3001/api por defecto)
 
 docker compose up --build
 ```
 
-- Web: http://localhost:3000 (el API se usa en http://localhost:3000/api/… vía rewrite al backend)  
-- Backend directo (debug): http://localhost:3001
+- Web: http://localhost:3000  
+- API (desde el navegador): `API_BASE_URL` → por defecto http://localhost:3001/api
 
 Migraciones: el contenedor `backend` ejecuta `prisma migrate deploy` al arrancar.
 
@@ -141,7 +141,7 @@ Compilar Next.js + pnpm en un VPS chico puede llevar el CPU al 200% y colgar Coo
 1. Hacé push a `main` (o `master`). El workflow `.github/workflows/docker-publish.yml` publica en GHCR:
    - `ghcr.io/TU_USUARIO/progress-sheet-backend:latest`
    - `ghcr.io/TU_USUARIO/progress-sheet-web:latest`
-2. En GitHub → **Settings → Variables** (opcional): `NEXT_PUBLIC_API_URL` = `/api` para el build de la imagen web (es el default).
+2. En GitHub → **Settings → Variables** (opcional): `NEXT_PUBLIC_API_URL` solo afecta el build de respaldo; en producción manda `API_BASE_URL` en Coolify.
 3. Si el repo es **privado**: en GitHub → **Packages** → cada imagen → **Package settings** → permitir acceso al repo, y en Coolify configurá credenciales de **GHCR** (usuario + PAT con `read:packages`).
 
 #### 2. Coolify (solo pull, casi sin CPU)
@@ -157,11 +157,12 @@ Compilar Next.js + pnpm en un VPS chico puede llevar el CPU al 200% y colgar Coo
 | `JWT_SECRET` | (obligatorio) |
 | `BACKEND_IMAGE` | `ghcr.io/tu-usuario/progress-sheet-backend:latest` |
 | `WEB_IMAGE` | `ghcr.io/tu-usuario/progress-sheet-web:latest` |
-| `API_BASE_URL` | `/api` |
+| `API_BASE_URL` | `https://progress.tudominio.com/api` |
 
 5. **Un solo dominio** (p. ej. `https://progress.tudominio.com`):
    - Servicio **web** → dominio raíz `/`
-   - Servicio **backend** → mismo dominio, path prefix **`/api`** (en Coolify: dominio del backend con Path `/api`, sin quitar el prefijo al reenviar)
+   - Servicio **backend** → mismo dominio, path **`/api`**
+   - `API_BASE_URL` = URL pública completa del API (misma que vería el navegador)
 6. **Deploy** — solo descarga imágenes y levanta Postgres (~segundos de CPU, no minutos de build).
 
 Seed en producción:

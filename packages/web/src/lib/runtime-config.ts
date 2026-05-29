@@ -6,18 +6,17 @@ declare global {
   }
 }
 
-/** Base path del API (mismo origen: `/api`; dev directo al backend: URL absoluta). */
-const DEFAULT_API_BASE = "/api";
+/** URL base del API con sufijo /api (p. ej. http://localhost:3001/api). */
+const DEFAULT_API_BASE = "http://localhost:3001/api";
 
 /**
- * Server-only, runtime. Usa API_BASE_URL (sin prefijo NEXT_PUBLIC_) para que Next
- * no lo reemplace en el build.
+ * Server-only, runtime. Variable API_BASE_URL en Docker/Coolify (URL completa).
+ * Sin prefijo NEXT_PUBLIC_ para que Next no la reemplace en el build.
  */
 export function serverApiBaseUrl(): string {
   return process.env.API_BASE_URL ?? DEFAULT_API_BASE;
 }
 
-/** API base con sufijo `/api` (p. ej. `/api` o `https://app.example.com/api`). */
 export function getApiBaseUrl(): string {
   if (typeof window !== "undefined") {
     const runtime = window.__PROGRESS_SHEET_CONFIG__?.apiUrl;

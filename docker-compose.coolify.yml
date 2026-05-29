@@ -54,8 +54,7 @@ services:
     pull_policy: always
     restart: unless-stopped
     environment:
-      # Ruta base del API en el mismo dominio que la web (proxy Coolify: /api → backend)
-      API_BASE_URL: ${API_BASE_URL:-/api}
+      API_BASE_URL: ${API_BASE_URL:?Set API_BASE_URL (e.g. https://app.example.com/api)}
       PORT: 3000
       HOSTNAME: 0.0.0.0
     depends_on:
