@@ -54,8 +54,8 @@ services:
     pull_policy: always
     restart: unless-stopped
     environment:
-      # API_BASE_URL: solo servidor, leída en runtime (no se embebe en el build de Next)
-      API_BASE_URL: ${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL (e.g. https://api.example.com/api)}
+      # Ruta base del API en el mismo dominio que la web (proxy Coolify: /api → backend)
+      API_BASE_URL: ${API_BASE_URL:-/api}
       PORT: 3000
       HOSTNAME: 0.0.0.0
     depends_on:

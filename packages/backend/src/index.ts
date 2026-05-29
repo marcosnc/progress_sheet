@@ -29,24 +29,26 @@ async function main() {
     }
   });
 
-  app.register(authRoutes, { prefix: "/auth" });
-
   app.register(async (app) => {
-    app.addHook("onRequest", async (request, reply) => {
-      try {
-        await request.jwtVerify();
-      } catch {
-        return reply.status(401).send({ error: "Unauthorized" });
-      }
+    app.register(authRoutes, { prefix: "/auth" });
+
+    app.register(async (protectedApp) => {
+      protectedApp.addHook("onRequest", async (request, reply) => {
+        try {
+          await request.jwtVerify();
+        } catch {
+          return reply.status(401).send({ error: "Unauthorized" });
+        }
+      });
+      protectedApp.register(projectsRoutes, { prefix: "/projects" });
+      protectedApp.register(planRoutes, { prefix: "" });
+      protectedApp.register(locationsRoutes, { prefix: "" });
+      protectedApp.register(progressRoutes, { prefix: "" });
+      protectedApp.register(locationLevelsRoutes, { prefix: "" });
+      protectedApp.register(templatesRoutes, { prefix: "" });
+      protectedApp.register(projectionsRoutes, { prefix: "" });
+      protectedApp.register(dimensionsRoutes, { prefix: "" });
     });
-    app.register(projectsRoutes, { prefix: "/projects" });
-    app.register(planRoutes, { prefix: "" });
-    app.register(locationsRoutes, { prefix: "" });
-    app.register(progressRoutes, { prefix: "" });
-    app.register(locationLevelsRoutes, { prefix: "" });
-    app.register(templatesRoutes, { prefix: "" });
-    app.register(projectionsRoutes, { prefix: "" });
-    app.register(dimensionsRoutes, { prefix: "" });
   }, { prefix: "/api" });
 
   app.get("/health", async () => ({ ok: true }));

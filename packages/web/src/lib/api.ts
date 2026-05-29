@@ -1,4 +1,4 @@
-import { getApiBaseUrl, getApiOrigin } from "./runtime-config";
+import { getApiBaseUrl } from "./runtime-config";
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -31,7 +31,7 @@ export async function api<T>(
 }
 
 export async function login(email: string, password: string) {
-  const res = await fetch(`${getApiOrigin()}/auth/login`, {
+  const res = await fetch(`${getApiBaseUrl()}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),

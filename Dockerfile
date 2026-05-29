@@ -56,7 +56,7 @@ ENTRYPOINT ["/entrypoint.sh"]
 
 # --- web ---
 FROM shared-builder AS web-builder
-ARG NEXT_PUBLIC_API_URL=http://localhost:3001/api
+ARG NEXT_PUBLIC_API_URL=/api
 # Bust GHA/buildx cache when the public API URL changes (ARG alone may not invalidate RUN).
 ARG CACHE_BUST=1
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
