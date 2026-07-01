@@ -14,6 +14,7 @@ import {
   dimensionsApi,
 } from "@/lib/api";
 import { ListRow } from "@/components/ListRow";
+import { DataAdminSection } from "@/components/DataAdminSection";
 
 function formatRecordedAt(iso: string) {
   const d = new Date(iso);
@@ -75,7 +76,18 @@ export default function ProjectDetailPage() {
   const [progressValue, setProgressValue] = useState("");
   const [showRecordProgress, setShowRecordProgress] = useState(false);
 
-  const [activeCategory, setActiveCategory] = useState<"planificacion" | "registro" | "consulta">("planificacion");
+  const [activeCategory, setActiveCategory] = useState<
+    "planificacion" | "registro" | "consulta" | "administracion"
+  >("planificacion");
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setUserRole(localStorage.getItem("role"));
+    }
+  }, []);
+
+  const isPlanner = userRole === "planner";
   const [activePlanningTab, setActivePlanningTab] = useState<
     "espacial" | "tareas" | "dimensiones" | "asignaciones" | "validacion"
   >("espacial");
@@ -510,6 +522,7 @@ export default function ProjectDetailPage() {
             ["planificacion", "Planificación"],
             ["registro", "Registro de avance"],
             ["consulta", "Consulta de estado"],
+            ...(isPlanner ? [["administracion", "Administración de datos"] as const] : []),
           ] as const
         ).map(([key, label]) => (
           <button
@@ -2792,6 +2805,10 @@ export default function ProjectDetailPage() {
           Registros de avance: {eventItems.length}. Para ver el detalle, usá la pestaña `Consulta de estado`.
         </p>
         </section>
+      )}
+
+      {activeCategory === "administracion" && isPlanner && (
+        <DataAdminSection projectId={id} projectName={project.name} />
       )}
     </main>
   );

@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
+import multipart from "@fastify/multipart";
 import { authRoutes } from "./routes/auth.js";
 import { projectsRoutes } from "./routes/projects.js";
 import { planRoutes } from "./routes/plan.js";
@@ -10,11 +11,13 @@ import { locationLevelsRoutes } from "./routes/location-levels.js";
 import { templatesRoutes } from "./routes/templates.js";
 import { projectionsRoutes } from "./routes/projections.js";
 import { dimensionsRoutes } from "./routes/dimensions.js";
+import { dataTransferRoutes } from "./routes/data-transfer.js";
 
 const app = Fastify({ logger: true });
 
 async function main() {
   await app.register(cors, { origin: true });
+  await app.register(multipart);
   await app.register(jwt, {
     secret: process.env.JWT_SECRET ?? "dev-secret-change-in-production",
   });
@@ -48,6 +51,7 @@ async function main() {
       protectedApp.register(templatesRoutes, { prefix: "" });
       protectedApp.register(projectionsRoutes, { prefix: "" });
       protectedApp.register(dimensionsRoutes, { prefix: "" });
+      protectedApp.register(dataTransferRoutes, { prefix: "" });
     });
   }, { prefix: "/api" });
 

@@ -14,10 +14,11 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     try {
-      const { token, tenantId } = await login(email, password);
+      const { token, tenantId, role } = await login(email, password);
       if (typeof window !== "undefined") {
         localStorage.setItem("token", token);
         if (tenantId) localStorage.setItem("tenantId", tenantId);
+        if (role) localStorage.setItem("role", role);
       }
       router.push("/projects");
       router.refresh();

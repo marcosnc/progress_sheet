@@ -32,3 +32,15 @@ export async function requireTenant(request: FastifyRequest, reply: FastifyReply
   }
   return { ...auth, tenantId };
 }
+
+export async function requirePlanner(
+  request: FastifyRequest,
+  reply: FastifyReply
+): Promise<JwtPayload & { tenantId: string }> {
+  const auth = await requireTenant(request, reply);
+  if (auth.role !== "planner") {
+    reply.status(403).send({ error: "Se requiere rol planner" });
+    throw new Error("Forbidden");
+  }
+  return auth;
+}

@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from "./runtime-config";
+import type { ApplyImportResult, ImportPreview } from "@progress-sheet/shared";
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -235,4 +236,38 @@ export const projectionsApi = {
     api<{ projections: { taskDefinitionId: string; locationId: string; ratePerDay: number; daysToComplete: number | null; currentValue: number }[] }>(
       `/projects/${projectId}/projections/velocity`
     ),
+};
+
+export const dataTransferApi = {
+  export: async (projectId: string): Promise<Blob> => {
+    const token = getToken();
+    const res = await fetch(`${getApiBaseUrl()}/projects/${projectId}/data-export`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error ?? res.statusText);
+    }
+    return res.blob();
+  },
+  previewImport: async (projectId: string, file: File): Promise<ImportPreview> => {
+    const token = getToken();
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${getApiBaseUrl()}/projects/${projectId}/data-import/preview`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error ?? res.statusText);
+    }
+    return res.json();
+  },
+  applyImport: (projectId: string, sessionId: string, approvedChangeIds: string[]) =>
+    api<ApplyImportResult>(`/projects/${projectId}/data-import/apply`, {
+      method: "POST",
+      body: JSON.stringify({ sessionId, approvedChangeIds }),
+    }),
 };
